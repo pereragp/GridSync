@@ -1,5 +1,6 @@
 using DotNetEnv;
 using GridSync.Api.Data;
+using GridSync.Api.Services;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -11,6 +12,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDbSettings"));
 builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
