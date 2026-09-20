@@ -1,0 +1,6 @@
+@GridSync.Api_HostAddress = http://localhost:5269
+
+GET {{GridSync.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

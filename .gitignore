@@ -1,0 +1,23 @@
+## .NET
+**/bin/
+**/obj/
+**/out/
+*.user
+*.suo
+.vs/
+
+## Secrets 
+**/.env
+**/appsettings.*.local.json
+**/secrets.json
+
+## Node
+**/node_modules/
+**/dist/
+
+## OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
