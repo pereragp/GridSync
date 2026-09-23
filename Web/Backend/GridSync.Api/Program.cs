@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using DotNetEnv;
 using GridSync.Api.Data;
@@ -17,8 +18,11 @@ builder.Services.Configure<MongoDbSettings>(
     builder.Configuration.GetSection("MongoDbSettings"));
 builder.Services.Configure<JwtSettings>(
     builder.Configuration.GetSection("JwtSettings"));
+builder.Services.Configure<EmailSettings>(
+    builder.Configuration.GetSection("EmailSettings"));
 
 builder.Services.AddSingleton<MongoDbContext>();
+builder.Services.AddScoped<IEmailService, GmailEmailService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<ReservationService>();
@@ -46,9 +50,39 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
             ClockSkew = TimeSpan.FromMinutes(1)
         };
+
+        // Reject tokens that were logged out (revoked jti).
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (string.IsNullOrWhiteSpace(jti))
+                {
+                    context.Fail("Token is missing jti.");
+                    return;
+                }
+
+                var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+                if (await authService.IsTokenRevokedAsync(jti))
+                {
+                    context.Fail("Token has been revoked.");
+                }
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -101,6 +135,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

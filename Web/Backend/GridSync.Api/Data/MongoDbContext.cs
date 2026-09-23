@@ -28,6 +28,9 @@ public class MongoDbContext
     public IMongoCollection<EnergyReservation> EnergyReservations =>
         _database.GetCollection<EnergyReservation>("EnergyReservations");
 
+    public IMongoCollection<RevokedToken> RevokedTokens =>
+        _database.GetCollection<RevokedToken>("RevokedTokens");
+
     public IMongoCollection<T> GetCollection<T>(string name) =>
         _database.GetCollection<T>(name);
 }

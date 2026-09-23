@@ -4,6 +4,7 @@
 // Description: HTTP endpoints for authentication (thin controller).
 // -------------------------------------------------------------
 
+using System.Security.Claims;
 using GridSync.Api.Models.Dtos;
 using GridSync.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -30,7 +31,6 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        // Delegate credential checks to the FAT service layer.
         try
         {
             var result = await _authService.LoginAsync(request);
@@ -39,6 +39,81 @@ public class AuthController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/auth/logout — revokes the current JWT.
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout()
+    {
+        try
+        {
+            await _authService.LogoutAsync(User);
+            return Ok(new { message = "Logged out successfully." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/auth/forgot-password — issues a reset token (returned for API testing).
+    /// </summary>
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        var result = await _authService.ForgotPasswordAsync(request);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// POST /api/auth/reset-password — set a new password with reset token.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+    {
+        try
+        {
+            await _authService.ResetPasswordAsync(request);
+            return Ok(new { message = "Password reset successfully. You can log in now." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/auth/change-password — change password while logged in.
+    /// </summary>
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Invalid token." });
+        }
+
+        try
+        {
+            await _authService.ChangePasswordAsync(userId, request);
+            return Ok(new { message = "Password changed successfully." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 }
