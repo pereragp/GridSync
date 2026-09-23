@@ -4,14 +4,17 @@
 // Description: HTTP endpoints for staff/prosumer account management.
 // -------------------------------------------------------------
 
+using GridSync.Api.Models;
 using GridSync.Api.Models.Dtos;
 using GridSync.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GridSync.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly UserService _userService;
@@ -24,8 +27,10 @@ public class UsersController : ControllerBase
 
     /// <summary>
     /// POST /api/users/staff — create Backoffice or GridOperator.
+    /// AllowAnonymous so the first admin can be seeded; lock this down later if needed.
     /// </summary>
     [HttpPost("staff")]
+    [AllowAnonymous]
     public async Task<IActionResult> CreateStaff([FromBody] CreateStaffUserRequest request)
     {
         // Create staff account via service.
@@ -44,6 +49,7 @@ public class UsersController : ControllerBase
     /// POST /api/users/prosumers/register — prosumer self-registration.
     /// </summary>
     [HttpPost("prosumers/register")]
+    [AllowAnonymous]
     public async Task<IActionResult> RegisterProsumer([FromBody] RegisterProsumerRequest request)
     {
         // Register prosumer as Pending.
@@ -73,6 +79,7 @@ public class UsersController : ControllerBase
     /// GET /api/users/pending — pending prosumer activations.
     /// </summary>
     [HttpGet("pending")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> GetPending()
     {
         // List pending prosumers for Backoffice.
@@ -124,6 +131,7 @@ public class UsersController : ControllerBase
     /// POST /api/users/{id}/approve — approve pending prosumer.
     /// </summary>
     [HttpPost("{id}/approve")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> Approve(string id)
     {
         // Backoffice approves pending activation.
@@ -168,6 +176,7 @@ public class UsersController : ControllerBase
     /// POST /api/users/{id}/deactivate
     /// </summary>
     [HttpPost("{id}/deactivate")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> Deactivate(string id)
     {
         // Backoffice deactivates account.
@@ -190,6 +199,7 @@ public class UsersController : ControllerBase
     /// POST /api/users/{id}/reactivate?backofficeUserId=...
     /// </summary>
     [HttpPost("{id}/reactivate")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> Reactivate(string id, [FromQuery] string backofficeUserId)
     {
         // Only Backoffice may reactivate (caller id passed for audit).
