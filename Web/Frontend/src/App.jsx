@@ -8,6 +8,7 @@ import CreateStaff from "./pages/CreateStaff";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
+import OperatorReservations from "./pages/OperatorReservations";
 import Profile from "./pages/Profile";
 import RegisterProsumer from "./pages/RegisterProsumer";
 import ResetPassword from "./pages/ResetPassword";
@@ -37,6 +38,7 @@ export default function App() {
               </Route>
               <Route path="/operator" element={<ProtectedRoute roles={["GridOperator"]} />}>
                 <Route index element={<OperatorHome />} />
+                <Route path="reservations" element={<OperatorReservations />} />
               </Route>
             </Route>
           </Route>

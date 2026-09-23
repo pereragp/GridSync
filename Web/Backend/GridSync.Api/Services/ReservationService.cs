@@ -32,8 +32,7 @@ public class ReservationService
     {
         await ExpirePastReservationsAsync();
 
-        var filter = Builders<EnergyReservation>.Filter.Eq(reservation => reservation.ProsumerId, prosumerId) &
-                     Builders<EnergyReservation>.Filter.Lt(reservation => reservation.SlotEnd, DateTime.UtcNow);
+        var filter = Builders<EnergyReservation>.Filter.Eq(reservation => reservation.ProsumerId, prosumerId);
 
         if (!string.IsNullOrWhiteSpace(status))
         {

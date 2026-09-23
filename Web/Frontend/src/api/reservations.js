@@ -5,6 +5,11 @@ export function getReservationHistory(status) {
   return apiRequest(`/api/reservations/history${query}`);
 }
 
+export function getManagedReservations(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest(`/api/reservations/manage${query}`);
+}
+
 export function createReservation(payload) {
   return apiRequest('/api/reservations', {
     method: 'POST',
@@ -23,5 +28,18 @@ export function cancelReservation(id, reason) {
   return apiRequest(`/api/reservations/${id}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason: reason || null }),
+  });
+}
+
+export function approveReservation(id) {
+  return apiRequest(`/api/reservations/${id}/approve`, {
+    method: 'POST',
+  });
+}
+
+export function rejectReservation(id, reason) {
+  return apiRequest(`/api/reservations/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
 }
