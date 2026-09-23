@@ -73,6 +73,19 @@ public class EnergyReservation
     [BsonIgnoreIfNull]
     public DateTime? CancelledAt { get; set; }
 
+    [BsonElement("rejectionReason")]
+    [BsonIgnoreIfNull]
+    public string? RejectionReason { get; set; }
+
+    [BsonElement("rejectedAt")]
+    [BsonIgnoreIfNull]
+    public DateTime? RejectedAt { get; set; }
+
+    [BsonElement("rejectedBy")]
+    [BsonRepresentation(BsonType.ObjectId)]
+    [BsonIgnoreIfNull]
+    public string? RejectedBy { get; set; }
+
     [BsonElement("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
