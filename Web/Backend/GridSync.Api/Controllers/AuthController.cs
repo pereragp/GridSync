@@ -6,6 +6,7 @@
 
 using GridSync.Api.Models.Dtos;
 using GridSync.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GridSync.Api.Controllers;
@@ -26,6 +27,7 @@ public class AuthController : ControllerBase
     /// POST /api/auth/login
     /// </summary>
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         // Delegate credential checks to the FAT service layer.
