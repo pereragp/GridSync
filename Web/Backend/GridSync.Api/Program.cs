@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using DotNetEnv;
 using GridSync.Api.Data;
@@ -44,6 +45,26 @@ builder.Services
             ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+
+        // Reject tokens that were logged out (revoked jti).
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                if (string.IsNullOrWhiteSpace(jti))
+                {
+                    context.Fail("Token is missing jti.");
+                    return;
+                }
+
+                var authService = context.HttpContext.RequestServices.GetRequiredService<AuthService>();
+                if (await authService.IsTokenRevokedAsync(jti))
+                {
+                    context.Fail("Token has been revoked.");
+                }
+            }
         };
     });
 

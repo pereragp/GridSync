@@ -56,6 +56,14 @@ public class User
     [BsonIgnoreIfNull]
     public string? ReactivatedBy { get; set; }
 
+    [BsonElement("passwordResetTokenHash")]
+    [BsonIgnoreIfNull]
+    public string? PasswordResetTokenHash { get; set; }
+
+    [BsonElement("passwordResetExpiresAt")]
+    [BsonIgnoreIfNull]
+    public DateTime? PasswordResetExpiresAt { get; set; }
+
     [BsonElement("createdAt")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
