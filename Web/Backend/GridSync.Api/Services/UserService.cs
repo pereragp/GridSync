@@ -34,6 +34,8 @@ public class UserService
 
         await EnsureEmailUniqueAsync(request.Email);
 
+        PasswordRules.EnsureValid(request.Password);
+
         var user = new User
         {
             FullName = request.FullName.Trim(),
@@ -64,6 +66,7 @@ public class UserService
         var nic = request.Nic.Trim();
         await EnsureEmailUniqueAsync(request.Email);
         await EnsureNicUniqueAsync(nic);
+        PasswordRules.EnsureValid(request.Password);
 
         var user = new User
         {
