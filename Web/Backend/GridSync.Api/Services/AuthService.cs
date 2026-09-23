@@ -21,12 +21,20 @@ public class AuthService
 {
     private readonly MongoDbContext _db;
     private readonly JwtSettings _jwt;
+    private readonly EmailSettings _email;
+    private readonly IEmailService _emailService;
 
-    public AuthService(MongoDbContext db, IOptions<JwtSettings> jwtOptions)
+    public AuthService(
+        MongoDbContext db,
+        IOptions<JwtSettings> jwtOptions,
+        IOptions<EmailSettings> emailOptions,
+        IEmailService emailService)
     {
-        // Inject MongoDB context and JWT settings.
+        // Inject MongoDB, JWT, and email services.
         _db = db;
         _jwt = jwtOptions.Value;
+        _email = emailOptions.Value;
+        _emailService = emailService;
     }
 
     /// <summary>
@@ -108,7 +116,7 @@ public class AuthService
     }
 
     /// <summary>
-    /// Starts password reset and returns a one-time token (for Swagger/API testing without email).
+    /// Starts password reset, emails a reset link via Gmail when configured.
     /// </summary>
     public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
@@ -120,7 +128,7 @@ public class AuthService
         {
             return new ForgotPasswordResponse
             {
-                Message = "If an account exists for that email, a reset token has been issued."
+                Message = "If an account exists for that email, a password reset link has been sent."
             };
         }
 
@@ -132,12 +140,37 @@ public class AuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.Users.ReplaceOneAsync(u => u.Id == user.Id, user);
 
-        return new ForgotPasswordResponse
+        var resetLink =
+            $"{_email.FrontendBaseUrl.TrimEnd('/')}/reset-password" +
+            $"?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(resetToken)}";
+
+        var response = new ForgotPasswordResponse
         {
-            Message = "If an account exists for that email, a reset token has been issued.",
-            ResetToken = resetToken,
+            Message = "If an account exists for that email, a password reset link has been sent.",
             ExpiresAt = expiresAt
         };
+
+        if (_emailService.IsConfigured)
+        {
+            var html = $"""
+                <p>Hello {System.Net.WebUtility.HtmlEncode(user.FullName)},</p>
+                <p>We received a request to reset your GridSync password.</p>
+                <p><a href="{resetLink}">Click here to reset your password</a></p>
+                <p>This link expires at {expiresAt:u} (UTC).</p>
+                <p>If you did not request this, you can ignore this email.</p>
+                """;
+
+            await _emailService.SendAsync(email, "GridSync password reset", html);
+            response.Message = "If an account exists for that email, a password reset link has been sent to your inbox.";
+        }
+        else
+        {
+            // Fallback for local/Swagger testing when Gmail is not configured.
+            response.Message = "Email is not configured. Use the reset token below (development fallback).";
+            response.ResetToken = resetToken;
+        }
+
+        return response;
     }
 
     /// <summary>
