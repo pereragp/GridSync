@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import BrandLogo from "../components/BrandLogo";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2000&q=80";
@@ -57,9 +58,7 @@ export default function Login() {
 
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
         <header className="gs-animate-fade-up flex items-center justify-between">
-          <p className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            GridSync
-          </p>
+          <BrandLogo variant="hero" className="drop-shadow-md" />
           <p className="hidden text-sm text-grid-100/80 sm:block">
             Smart solar microgrid trading
           </p>
@@ -212,7 +211,9 @@ export function AuthShell({ children }) {
         <div className="absolute inset-0 bg-grid-900/80" />
       </div>
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-10">
-        <p className="mb-6 text-center font-display text-3xl font-semibold text-white">GridSync</p>
+        <div className="mb-6 flex justify-center">
+          <BrandLogo variant="auth" className="drop-shadow-md" />
+        </div>
         <div className="rounded-2xl border border-white/10 bg-white p-6 shadow-xl sm:p-7">
           {children}
         </div>
