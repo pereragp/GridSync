@@ -1,5 +1,6 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import BrandLogo from "./BrandLogo";
 
 export default function Layout() {
   const { user, logout, homePathFor } = useAuth();
@@ -13,17 +14,14 @@ export default function Layout() {
       <header className="sticky top-0 z-30 border-b border-grid-100/90 bg-white/95 shadow-sm shadow-grid-900/5 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-3">
-            <Link to={homePathFor(user.role)} className="group flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-grid-700 text-sm font-bold text-white shadow-md shadow-grid-700/30 transition group-hover:bg-grid-800">
-                GS
-              </span>
-              <span className="leading-tight">
-                <span className="block font-display text-xl font-semibold tracking-tight text-grid-900">
-                  GridSync
-                </span>
-                <span className="hidden text-[11px] font-medium uppercase tracking-[0.16em] text-grid-600/80 sm:block">
-                  Solar microgrid trading
-                </span>
+            <Link
+              to={homePathFor(user.role)}
+              className="group flex items-center gap-3 transition opacity-100 hover:opacity-90"
+              aria-label="GridSync home"
+            >
+              <BrandLogo variant="header" />
+              <span className="hidden text-[11px] font-medium uppercase tracking-[0.16em] text-grid-600/80 sm:block">
+                Solar microgrid trading
               </span>
             </Link>
           </div>
@@ -90,8 +88,8 @@ export default function Layout() {
       <footer className="mt-auto border-t border-grid-800/20 bg-grid-900 text-grid-100">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-3">
           <div>
-            <p className="font-display text-2xl font-semibold text-white">GridSync</p>
-            <p className="mt-2 max-w-xs text-sm leading-relaxed text-grid-100/70">
+            <BrandLogo variant="footer" className="brightness-110" />
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-grid-100/70">
               Synchronizing solar microgrids, energy slots, and prosumer trading
               for a cleaner grid.
             </p>
