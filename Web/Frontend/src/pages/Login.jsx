@@ -57,19 +57,10 @@ export default function Login() {
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-dvh max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-12">
-        <header className="gs-animate-fade-up flex items-center justify-between">
-          <BrandLogo variant="hero" className="drop-shadow-md" />
-          <p className="hidden text-sm text-grid-100/80 sm:block">
-            Smart solar microgrid trading
-          </p>
-        </header>
-
-        <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-12 lg:gap-16">
+        <div className="grid flex-1 items-center gap-10 py-6 lg:grid-cols-12 lg:gap-16">
           {/* Brand / story column */}
           <section className="gs-animate-fade-up lg:col-span-7" style={{ animationDelay: "0.12s" }}>
-            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.22em] text-grid-100/70">
-              Renewable energy operations
-            </p>
+            <BrandLogo variant="hero" className="mb-4 drop-shadow-md sm:mb-5" />
             <h1 className="max-w-xl font-display text-4xl font-semibold leading-tight text-white sm:text-5xl lg:text-6xl">
               Power trading, synchronized for a cleaner grid.
             </h1>
@@ -77,16 +68,6 @@ export default function Login() {
               Sign in to manage microgrid nodes, energy slots, and prosumer
               reservations from one secure console.
             </p>
-            <div className="mt-8 flex flex-wrap gap-6 text-sm text-grid-100/75">
-              <span className="inline-flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-grid-500" />
-                Backoffice control
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-grid-500" />
-                Grid operator tools
-              </span>
-            </div>
           </section>
 
           {/* Sign-in panel */}
@@ -178,7 +159,6 @@ export default function Login() {
         </div>
 
         <footer className="gs-animate-fade-up pb-2 text-xs text-grid-100/55" style={{ animationDelay: "0.35s" }}>
-          Secure JWT access · Role-based console · Built for sustainable microgrids
         </footer>
       </div>
     </div>
