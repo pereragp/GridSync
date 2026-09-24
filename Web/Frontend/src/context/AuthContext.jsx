@@ -40,6 +40,7 @@ export function AuthProvider({ children }) {
     function homePathFor(role) {
       if (role === "Backoffice") return "/backoffice";
       if (role === "GridOperator") return "/operator";
+      if (role === "Prosumer") return "/prosumer";
       return "/profile";
     }
 

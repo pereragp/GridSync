@@ -1,7 +1,71 @@
 @import "tailwindcss";
 
-body {
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Source Serif 4", Georgia, serif;
+  --color-grid-50: #f2faf4;
+  --color-grid-100: #e1f5e8;
+  --color-grid-500: #1f9a57;
+  --color-grid-600: #178047;
+  --color-grid-700: #12663a;
+  --color-grid-800: #0f5130;
+  --color-grid-900: #0c3d25;
+}
+
+html,
+body,
+#root {
   margin: 0;
-  min-height: 100vh;
-  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: #f2faf4;
+  color: #0f172a;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+@keyframes gs-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gs-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gs-pan {
+  from {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+.gs-animate-fade-up {
+  animation: gs-fade-up 0.7s ease-out both;
+}
+
+.gs-animate-fade-in {
+  animation: gs-fade-in 0.9s ease-out both;
+}
+
+.gs-animate-pan {
+  animation: gs-pan 28s ease-in-out infinite alternate;
 }

@@ -9,6 +9,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
 import Profile from "./pages/Profile";
+import ProsumerHome from "./pages/ProsumerHome";
 import RegisterProsumer from "./pages/RegisterProsumer";
 import ResetPassword from "./pages/ResetPassword";
 
@@ -32,6 +33,9 @@ export default function App() {
               </Route>
               <Route element={<ProtectedRoute roles={["GridOperator"]} />}>
                 <Route path="/operator" element={<OperatorHome />} />
+              </Route>
+              <Route element={<ProtectedRoute roles={["Prosumer"]} />}>
+                <Route path="/prosumer" element={<ProsumerHome />} />
               </Route>
               <Route path="/profile" element={<Profile />} />
               <Route path="/change-password" element={<ChangePassword />} />
