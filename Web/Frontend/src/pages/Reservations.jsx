@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   cancelReservation,
   createReservation,
+  getAvailableBookingSlots,
   getReservationHistory,
+  getUpcomingReservations,
   updateReservation,
 } from '../api/reservations';
 import {
@@ -15,11 +17,25 @@ import {
   inputClass,
 } from '../components/ui';
 
-const statuses = ['', 'Pending', 'Approved', 'Rejected', 'Cancelled'];
+const statuses = [
+  '',
+  'Pending',
+  'Approved',
+  'Rejected',
+  'Cancelled',
+  'Expired',
+];
+const reservationTypes = ['', 'Charging', 'DropOff'];
 
 export default function Reservations() {
   const [reservations, setReservations] = useState([]);
+  const [upcomingReservations, setUpcomingReservations] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState([]);
   const [status, setStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [reservationType, setReservationType] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [form, setForm] = useState({ slotId: '', reservationType: 'Charging' });
   const [editing, setEditing] = useState({});
   const [error, setError] = useState('');
@@ -28,11 +44,31 @@ export default function Reservations() {
   const [submitting, setSubmitting] = useState(false);
   const [actionId, setActionId] = useState('');
 
+  useEffect(() => {
+    let cancelled = false;
+    getAvailableBookingSlots()
+      .then((data) => {
+        if (!cancelled) setAvailableSlots(data || []);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setError(err.message || 'Failed to load available slots');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setError('');
     setLoading(true);
     try {
-      setReservations((await getReservationHistory(status)) || []);
+      const [history, upcoming] = await Promise.all([
+        getReservationHistory(status),
+        getUpcomingReservations(status),
+      ]);
+      setReservations(history || []);
+      setUpcomingReservations(upcoming || []);
     } catch (err) {
       setError(err.message || 'Failed to load reservations');
     } finally {
@@ -42,9 +78,15 @@ export default function Reservations() {
 
   useEffect(() => {
     let cancelled = false;
-    getReservationHistory(status)
-      .then((data) => {
-        if (!cancelled) setReservations(data || []);
+    Promise.all([
+      getReservationHistory(status),
+      getUpcomingReservations(status),
+    ])
+      .then(([history, upcoming]) => {
+        if (!cancelled) {
+          setReservations(history || []);
+          setUpcomingReservations(upcoming || []);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message || 'Failed to load reservations');
@@ -56,6 +98,28 @@ export default function Reservations() {
       cancelled = true;
     };
   }, [status]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  function matchesFilters(reservation) {
+    const matchesSearch =
+      !normalizedSearch ||
+      [reservation.reservationCode, reservation.stationName]
+        .filter(Boolean)
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    const matchesType =
+      !reservationType || reservation.reservationType === reservationType;
+    const slotDate = reservation.slotStart
+      ? reservation.slotStart.slice(0, 10)
+      : '';
+    const matchesFromDate = !fromDate || (slotDate && slotDate >= fromDate);
+    const matchesToDate = !toDate || (slotDate && slotDate <= toDate);
+
+    return matchesSearch && matchesType && matchesFromDate && matchesToDate;
+  }
+
+  const filteredUpcomingReservations =
+    upcomingReservations.filter(matchesFilters);
+  const filteredReservations = reservations.filter(matchesFilters);
 
   function clearFeedback() {
     setError('');
@@ -123,20 +187,30 @@ export default function Reservations() {
       <section className={`${cardClass} mb-6`}>
         <h2 className='mb-1 text-lg font-medium'>Create reservation</h2>
         <p className='mb-4 text-sm text-slate-600'>
-          Enter the booking slot ID supplied by the grid operator.
+          Choose an available booking slot within the next 7 days.
         </p>
         <form
           onSubmit={onCreate}
           className='grid gap-3 md:grid-cols-[1fr_12rem_auto] md:items-end'
         >
-          <Field label='Booking slot ID'>
-            <input
+          <Field label='Available booking slot'>
+            <select
               className={inputClass}
               value={form.slotId}
               onChange={(e) => setForm({ ...form, slotId: e.target.value })}
-              placeholder='MongoDB slot ID'
               required
-            />
+              disabled={availableSlots.length === 0}
+            >
+              <option value=''>
+                {availableSlots.length ? 'Select a slot' : 'No available slots'}
+              </option>
+              {availableSlots.map((slot) => (
+                <option key={slot.id} value={slot.id}>
+                  {slot.stationName} - {formatDate(slot.slotStart)} (
+                  {slot.energyKwh} kWh, {slot.availableReservations} available)
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label='Reservation type'>
             <select
@@ -156,32 +230,119 @@ export default function Reservations() {
         </form>
       </section>
 
-      <section className={cardClass}>
+      <section className={`${cardClass} mb-6`}>
         <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
-          <h2 className='text-lg font-medium'>Reservation history</h2>
-          <select
-            className={`${inputClass} w-auto`}
-            value={status}
-            onChange={(e) => {
-              setLoading(true);
-              setStatus(e.target.value);
-            }}
-          >
-            {statuses.map((value) => (
-              <option key={value} value={value}>
-                {value || 'All statuses'}
-              </option>
-            ))}
-          </select>
+          <h2 className='text-lg font-medium'>Upcoming reservations</h2>
+          <span className='text-sm text-slate-500'>
+            Showing {filteredUpcomingReservations.length} of{' '}
+            {upcomingReservations.length}
+          </span>
+        </div>
+        <div className='mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4'>
+          <label className='text-sm'>
+            <span className='mb-1 block font-medium text-slate-700'>
+              Search
+            </span>
+            <input
+              className={inputClass}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder='Code or station'
+            />
+          </label>
+          <label className='text-sm'>
+            <span className='mb-1 block font-medium text-slate-700'>
+              Status
+            </span>
+            <select
+              className={inputClass}
+              value={status}
+              onChange={(e) => {
+                setLoading(true);
+                setStatus(e.target.value);
+              }}
+            >
+              {statuses.map((value) => (
+                <option key={value} value={value}>
+                  {value || 'All statuses'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className='text-sm'>
+            <span className='mb-1 block font-medium text-slate-700'>Type</span>
+            <select
+              className={inputClass}
+              value={reservationType}
+              onChange={(e) => setReservationType(e.target.value)}
+            >
+              {reservationTypes.map((value) => (
+                <option key={value} value={value}>
+                  {value === 'DropOff' ? 'Drop-off' : value || 'All types'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className='grid grid-cols-2 gap-2'>
+            <label className='text-sm'>
+              <span className='mb-1 block font-medium text-slate-700'>
+                From
+              </span>
+              <input
+                className={inputClass}
+                type='date'
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+            <label className='text-sm'>
+              <span className='mb-1 block font-medium text-slate-700'>To</span>
+              <input
+                className={inputClass}
+                type='date'
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+          </div>
         </div>
         {loading ? <p className='text-sm text-slate-500'>Loading…</p> : null}
-        {!loading && reservations.length === 0 ? (
+        {!loading && filteredUpcomingReservations.length === 0 ? (
           <p className='text-sm text-slate-500'>
-            No reservations found for this filter.
+            No upcoming reservations found for this filter.
           </p>
         ) : null}
         <div className='space-y-3'>
-          {reservations.map((reservation) => (
+          {filteredUpcomingReservations.map((reservation) => (
+            <ReservationItem
+              key={reservation.id}
+              reservation={reservation}
+              value={editing[reservation.id] ?? reservation.reservationType}
+              onChange={(value) =>
+                setEditing({ ...editing, [reservation.id]: value })
+              }
+              onUpdate={() => onUpdate(reservation)}
+              onCancel={() => onCancel(reservation)}
+              busy={actionId === reservation.id}
+            />
+          ))}
+        </div>
+      </section>
+
+      <section className={cardClass}>
+        <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+          <h2 className='text-lg font-medium'>Booking history</h2>
+          <span className='text-sm text-slate-500'>
+            Showing {filteredReservations.length} of {reservations.length}
+          </span>
+        </div>
+        {!loading && filteredReservations.length === 0 ? (
+          <p className='text-sm text-slate-500'>
+            No past reservations found for this filter.
+          </p>
+        ) : null}
+        <div className='space-y-3'>
+          {filteredReservations.map((reservation) => (
             <ReservationItem
               key={reservation.id}
               reservation={reservation}
@@ -280,6 +441,7 @@ function StatusBadge({ status }) {
     Approved: 'bg-teal-50 text-teal-800',
     Rejected: 'bg-red-50 text-red-800',
     Cancelled: 'bg-slate-200 text-slate-700',
+    Expired: 'bg-slate-100 text-slate-700',
   };
   return (
     <span

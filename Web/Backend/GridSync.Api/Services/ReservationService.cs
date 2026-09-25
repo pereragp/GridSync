@@ -42,8 +42,30 @@ public class ReservationService
         }
 
         return await _db.EnergyReservations
-            .Find(filter)
+            .Find(filter & Builders<EnergyReservation>.Filter.Lte(
+                reservation => reservation.SlotEnd,
+                DateTime.UtcNow))
             .SortByDescending(reservation => reservation.SlotStart)
+            .ToListAsync();
+    }
+
+    public async Task<List<EnergyReservation>> GetUpcomingAsync(string prosumerId, string? status)
+    {
+        await ExpirePastReservationsAsync();
+
+        var filter = Builders<EnergyReservation>.Filter.Eq(reservation => reservation.ProsumerId, prosumerId) &
+                     Builders<EnergyReservation>.Filter.Gt(reservation => reservation.SlotEnd, DateTime.UtcNow);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            filter &= Builders<EnergyReservation>.Filter.Eq(
+                reservation => reservation.Status,
+                status.Trim());
+        }
+
+        return await _db.EnergyReservations
+            .Find(filter)
+            .SortBy(reservation => reservation.SlotStart)
             .ToListAsync();
     }
 
@@ -63,6 +85,45 @@ public class ReservationService
             .Find(filter)
             .SortBy(reservation => reservation.SlotStart)
             .ToListAsync();
+    }
+
+    public async Task<List<AvailableBookingSlotResponse>> GetAvailableSlotsAsync()
+    {
+        var now = DateTime.UtcNow;
+        var slots = await _db.EnergyBookingSlots
+            .Find(slot => slot.Status == SlotStatus.Available &&
+                         slot.SlotStart > now &&
+                         slot.SlotStart <= now.AddDays(7) &&
+                         slot.ReservedCount < slot.MaxReservations)
+            .SortBy(slot => slot.SlotStart)
+            .ToListAsync();
+
+        if (slots.Count == 0)
+        {
+            return [];
+        }
+
+        var stationIds = slots.Select(slot => slot.StationId).Distinct().ToList();
+        var stations = await _db.SolarStations
+            .Find(station => stationIds.Contains(station.Id) && station.Status == StationStatus.Active)
+            .ToListAsync();
+        var stationNames = stations.ToDictionary(station => station.Id, station => station.Name);
+
+        return slots
+            .Where(slot => stationNames.ContainsKey(slot.StationId))
+            .Select(slot => new AvailableBookingSlotResponse
+            {
+                Id = slot.Id,
+                StationId = slot.StationId,
+                StationName = stationNames[slot.StationId],
+                SlotStart = slot.SlotStart,
+                SlotEnd = slot.SlotEnd,
+                EnergyKwh = slot.EnergyKwh,
+                AvailableReservations = Math.Max(slot.MaxReservations - slot.ReservedCount, 0),
+                Status = slot.Status,
+                Notes = slot.Notes
+            })
+            .ToList();
     }
 
     public async Task<EnergyReservation> ReviewAsync(
