@@ -25,6 +25,7 @@ builder.Services.AddSingleton<MongoDbContext>();
 builder.Services.AddScoped<IEmailService, GmailEmailService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<ReservationService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()
     ?? throw new InvalidOperationException("JwtSettings is missing from configuration.");
