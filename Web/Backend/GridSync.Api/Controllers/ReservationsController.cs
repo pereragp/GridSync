@@ -65,6 +65,23 @@ public class ReservationsController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/reservations/upcoming
+    /// </summary>
+    [HttpGet("upcoming")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> GetUpcoming([FromQuery] string? status)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        var reservations = await _reservationService.GetUpcomingAsync(prosumerId, status);
+        return Ok(reservations);
+    }
+
+    /// <summary>
     /// GET /api/reservations/manage?status=Pending
     /// </summary>
     [HttpGet("manage")]
@@ -73,6 +90,17 @@ public class ReservationsController : ControllerBase
     {
         var reservations = await _reservationService.GetForStaffAsync(status);
         return Ok(reservations);
+    }
+
+    /// <summary>
+    /// GET /api/reservations/slots — available slots for a new prosumer reservation.
+    /// </summary>
+    [HttpGet("slots")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> GetAvailableSlots()
+    {
+        var slots = await _reservationService.GetAvailableSlotsAsync();
+        return Ok(slots);
     }
 
     /// <summary>

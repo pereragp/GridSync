@@ -5,9 +5,18 @@ export function getReservationHistory(status) {
   return apiRequest(`/api/reservations/history${query}`);
 }
 
+export function getUpcomingReservations(status) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest(`/api/reservations/upcoming${query}`);
+}
+
 export function getManagedReservations(status) {
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
   return apiRequest(`/api/reservations/manage${query}`);
+}
+
+export function getAvailableBookingSlots() {
+  return apiRequest('/api/reservations/slots');
 }
 
 export function createReservation(payload) {
