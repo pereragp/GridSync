@@ -29,17 +29,27 @@ export default function Layout() {
           <nav className="flex flex-wrap items-center gap-1 text-sm sm:gap-1.5">
             {user.role === "Backoffice" && (
               <>
-                <NavLink className={navClass} to="/backoffice">
+                <NavLink className={navClass} to='/backoffice'>
                   Users
                 </NavLink>
-                <NavLink className={navClass} to="/backoffice/staff/new">
+                <NavLink className={navClass} to='/backoffice/staff/new'>
                   Create staff
                 </NavLink>
               </>
             )}
-            {user.role === "GridOperator" && (
-              <NavLink className={navClass} to="/operator">
-                Home
+            {user.role === 'GridOperator' && (
+              <>
+                <NavLink className={navClass} to='/operator'>
+                  Home
+                </NavLink>
+                <NavLink className={navClass} to='/operator/reservations'>
+                  Reservations
+                </NavLink>
+              </>
+            )}
+            {user.role === 'Prosumer' && (
+              <NavLink className={navClass} to='/reservations'>
+                Reservations
               </NavLink>
             )}
             {user.role === "Prosumer" && (
@@ -50,7 +60,7 @@ export default function Layout() {
             <NavLink className={navClass} to="/profile">
               Profile
             </NavLink>
-            <NavLink className={navClass} to="/change-password">
+            <NavLink className={navClass} to='/change-password'>
               Password
             </NavLink>
 
@@ -71,7 +81,7 @@ export default function Layout() {
             </div>
 
             <button
-              type="button"
+              type='button'
               onClick={() => logout()}
               className="rounded-lg border border-grid-200 bg-white px-3 py-1.5 text-sm font-medium text-grid-800 transition hover:border-grid-400 hover:bg-grid-50"
             >
