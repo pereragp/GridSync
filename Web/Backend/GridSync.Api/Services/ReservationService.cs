@@ -212,6 +212,71 @@ public class ReservationService
         };
     }
 
+    public async Task<ReservationCompletionResponse> CompleteAsync(
+        string operatorId,
+        string reservationId)
+    {
+        var reservation = await FindRequiredAsync(reservationId);
+        if (reservation.Status != ReservationStatus.Approved)
+        {
+            throw new InvalidOperationException(
+                $"Only approved reservations can be completed. Current status: {reservation.Status}.");
+        }
+
+        if (string.IsNullOrWhiteSpace(reservation.QrPayload))
+        {
+            throw new InvalidOperationException("Reservation does not have a QR code.");
+        }
+
+        var completedAt = DateTime.UtcNow;
+        reservation.Status = ReservationStatus.Completed;
+        reservation.CompletedAt = completedAt;
+        reservation.CompletedBy = operatorId;
+        reservation.UpdatedAt = completedAt;
+
+        var result = await _db.EnergyReservations.ReplaceOneAsync(
+            candidate => candidate.Id == reservation.Id &&
+                         candidate.Status == ReservationStatus.Approved,
+            reservation);
+
+        if (result.ModifiedCount != 1)
+        {
+            throw new InvalidOperationException("Reservation status has already changed.");
+        }
+
+        return new ReservationCompletionResponse
+        {
+            ReservationId = reservation.Id,
+            ReservationCode = reservation.ReservationCode,
+            Status = reservation.Status,
+            CompletedAt = completedAt,
+            CompletedBy = operatorId
+        };
+    }
+
+    public async Task<ReservationDashboardStatsResponse> GetDashboardStatsAsync()
+    {
+        await ExpirePastReservationsAsync();
+        var now = DateTime.UtcNow;
+        var reservations = _db.EnergyReservations;
+
+        return new ReservationDashboardStatsResponse
+        {
+            PendingReservations = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Pending),
+            ApprovedUpcomingReservations = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Approved && reservation.SlotEnd > now),
+            CompletedTransfers = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Completed),
+            RejectedReservations = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Rejected),
+            CancelledReservations = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Cancelled),
+            ExpiredReservations = await reservations.CountDocumentsAsync(
+                reservation => reservation.Status == ReservationStatus.Expired)
+        };
+    }
+
     public async Task<EnergyReservation> UpdateAsync(
         string prosumerId,
         string reservationId,

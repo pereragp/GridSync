@@ -59,3 +59,13 @@ export function verifyReservationQr(qrPayload) {
     body: JSON.stringify({ qrPayload }),
   });
 }
+
+export function completeReservation(id) {
+  return apiRequest(`/api/reservations/${id}/complete`, {
+    method: 'POST',
+  });
+}
+
+export function getReservationDashboardStats() {
+  return apiRequest('/api/reservations/dashboard-stats');
+}

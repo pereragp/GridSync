@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { verifyReservationQr } from '../api/reservations';
+import { completeReservation, verifyReservationQr } from '../api/reservations';
 import {
   Alert,
   PageHeader,
@@ -19,6 +19,7 @@ export default function OperatorQrScanner() {
   const [message, setMessage] = useState('');
   const [scanning, setScanning] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   useEffect(() => () => stopScanner(), []);
 
@@ -75,6 +76,21 @@ export default function OperatorQrScanner() {
       setError(err.message || 'QR verification failed');
     } finally {
       setVerifying(false);
+    }
+  }
+
+  async function onComplete() {
+    setError('');
+    setMessage('');
+    setCompleting(true);
+    try {
+      const completed = await completeReservation(result.reservationId);
+      setResult((current) => ({ ...current, status: completed.status }));
+      setMessage(`Transfer completed for ${completed.reservationCode}.`);
+    } catch (err) {
+      setError(err.message || 'Could not complete transfer');
+    } finally {
+      setCompleting(false);
     }
   }
 
@@ -138,7 +154,11 @@ export default function OperatorQrScanner() {
         <section className={cardClass}>
           <h2 className='mb-3 text-lg font-medium'>Verification result</h2>
           {result ? (
-            <VerificationResult result={result} />
+            <VerificationResult
+              result={result}
+              onComplete={onComplete}
+              completing={completing}
+            />
           ) : (
             <p className='text-sm text-slate-500'>
               No reservation verified yet.
@@ -150,10 +170,14 @@ export default function OperatorQrScanner() {
   );
 }
 
-function VerificationResult({ result }) {
+function VerificationResult({ result, onComplete, completing }) {
   return (
     <div className='space-y-3 text-sm'>
-      <p className='font-semibold text-teal-800'>Valid approved reservation</p>
+      <p className='font-semibold text-teal-800'>
+        {result.status === 'Completed'
+          ? 'Energy transfer completed'
+          : 'Valid approved reservation'}
+      </p>
       <Detail label='Reservation' value={result.reservationCode} />
       <Detail label='Prosumer NIC' value={result.prosumerNic} />
       <Detail label='Station' value={result.stationName || 'Unavailable'} />
@@ -163,6 +187,16 @@ function VerificationResult({ result }) {
       />
       <Detail label='Type' value={result.reservationType} />
       <Detail label='Energy' value={`${result.energyKwh} kWh`} />
+      {result.status === 'Approved' ? (
+        <button
+          type='button'
+          className={`${btnPrimary} mt-3 w-full`}
+          onClick={onComplete}
+          disabled={completing}
+        >
+          {completing ? 'Completing...' : 'Complete energy transfer'}
+        </button>
+      ) : null}
     </div>
   );
 }
