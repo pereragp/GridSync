@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { jsPDF } from 'jspdf';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   cancelReservation,
@@ -435,6 +436,7 @@ function ReservationItem({
       {reservation.status === 'Approved' && reservation.qrPayload ? (
         <div className='mt-4 flex flex-wrap items-center gap-4 rounded-md border border-teal-100 bg-teal-50 p-3'>
           <QRCodeCanvas
+            id={`reservation-qr-${reservation.id}`}
             value={reservation.qrPayload}
             size={144}
             includeMargin
@@ -450,6 +452,13 @@ function ReservationItem({
                 Generated {formatDate(reservation.qrGeneratedAt)}
               </p>
             ) : null}
+            <button
+              type='button'
+              className={`${btnSecondary} mt-3`}
+              onClick={() => downloadReservationPdf(reservation)}
+            >
+              Download PDF
+            </button>
           </div>
         </div>
       ) : null}
@@ -480,4 +489,35 @@ function formatDate(value) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function downloadReservationPdf(reservation) {
+  const qrCanvas = document.getElementById(`reservation-qr-${reservation.id}`);
+  if (!qrCanvas) return;
+
+  const code = reservation.reservationCode || reservation.id;
+  const documentFile = new jsPDF();
+  documentFile.setFontSize(20);
+  documentFile.text('GridSync Reservation', 20, 24);
+  documentFile.setFontSize(12);
+  documentFile.text(`Reservation: ${code}`, 20, 38);
+  documentFile.text(
+    `Station: ${reservation.stationName || 'Unavailable'}`,
+    20,
+    48,
+  );
+  documentFile.text(`Type: ${reservation.reservationType}`, 20, 58);
+  documentFile.text(`Energy: ${reservation.energyKwh} kWh`, 20, 68);
+  documentFile.text(`Start: ${formatDate(reservation.slotStart)}`, 20, 78);
+  documentFile.text(`End: ${formatDate(reservation.slotEnd)}`, 20, 88);
+  documentFile.text('Present this QR code to the grid operator.', 20, 104);
+  documentFile.addImage(
+    qrCanvas.toDataURL('image/png'),
+    'PNG',
+    20,
+    114,
+    55,
+    55,
+  );
+  documentFile.save(`${code}.pdf`);
 }
