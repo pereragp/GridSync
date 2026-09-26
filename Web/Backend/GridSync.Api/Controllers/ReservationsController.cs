@@ -22,7 +22,7 @@ public class ReservationsController : ControllerBase
     /// <summary>
     /// GET /api/reservations/{id}
     /// </summary>
-    [HttpGet("{id}")]
+    [HttpGet("{id:length(24)}")]
     public async Task<IActionResult> GetById(string id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -208,6 +208,65 @@ public class ReservationsController : ControllerBase
     public async Task<IActionResult> Reject(string id, [FromBody] ReviewReservationRequest request)
     {
         return await Review(id, false, request);
+    }
+
+    /// <summary>
+    /// POST /api/reservations/verify-qr
+    /// </summary>
+    [HttpPost("verify-qr")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> VerifyQr([FromBody] VerifyReservationQrRequest request)
+    {
+        try
+        {
+            var result = await _reservationService.VerifyQrAsync(request.QrPayload);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/reservations/{id}/complete
+    /// </summary>
+    [HttpPost("{id}/complete")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> Complete(string id)
+    {
+        var operatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(operatorId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            return Ok(await _reservationService.CompleteAsync(operatorId, id));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/reservations/dashboard-stats
+    /// </summary>
+    [HttpGet("dashboard-stats")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> DashboardStats()
+    {
+        return Ok(await _reservationService.GetDashboardStatsAsync());
     }
 
     private async Task<IActionResult> Review(string id, bool approve, ReviewReservationRequest request)

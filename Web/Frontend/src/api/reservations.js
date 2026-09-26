@@ -52,3 +52,20 @@ export function rejectReservation(id, reason) {
     body: JSON.stringify({ reason }),
   });
 }
+
+export function verifyReservationQr(qrPayload) {
+  return apiRequest('/api/reservations/verify-qr', {
+    method: 'POST',
+    body: JSON.stringify({ qrPayload }),
+  });
+}
+
+export function completeReservation(id) {
+  return apiRequest(`/api/reservations/${id}/complete`, {
+    method: 'POST',
+  });
+}
+
+export function getReservationDashboardStats() {
+  return apiRequest('/api/reservations/dashboard-stats');
+}
