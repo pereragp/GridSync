@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   cancelReservation,
   createReservation,
@@ -430,6 +431,27 @@ function ReservationItem({
         <p className='mt-2 text-sm text-slate-600'>
           Cancellation reason: {reservation.cancellationReason}
         </p>
+      ) : null}
+      {reservation.status === 'Approved' && reservation.qrPayload ? (
+        <div className='mt-4 flex flex-wrap items-center gap-4 rounded-md border border-teal-100 bg-teal-50 p-3'>
+          <QRCodeCanvas
+            value={reservation.qrPayload}
+            size={144}
+            includeMargin
+            aria-label={`QR code for ${reservation.reservationCode || 'reservation'}`}
+          />
+          <div className='text-sm text-teal-900'>
+            <p className='font-medium'>Transaction QR code</p>
+            <p className='mt-1 text-teal-800'>
+              Show this code to the grid operator at the station.
+            </p>
+            {reservation.qrGeneratedAt ? (
+              <p className='mt-1 text-xs text-teal-700'>
+                Generated {formatDate(reservation.qrGeneratedAt)}
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </article>
   );

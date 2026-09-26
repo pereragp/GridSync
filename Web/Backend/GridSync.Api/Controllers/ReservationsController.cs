@@ -210,6 +210,28 @@ public class ReservationsController : ControllerBase
         return await Review(id, false, request);
     }
 
+    /// <summary>
+    /// POST /api/reservations/verify-qr
+    /// </summary>
+    [HttpPost("verify-qr")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> VerifyQr([FromBody] VerifyReservationQrRequest request)
+    {
+        try
+        {
+            var result = await _reservationService.VerifyQrAsync(request.QrPayload);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private async Task<IActionResult> Review(string id, bool approve, ReviewReservationRequest request)
     {
         var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);

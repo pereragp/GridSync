@@ -142,6 +142,8 @@ public class ReservationService
         if (approve)
         {
             reservation.Status = ReservationStatus.Approved;
+            reservation.QrPayload = GenerateQrPayload(reservation);
+            reservation.QrGeneratedAt = DateTime.UtcNow;
         }
         else
         {
@@ -172,6 +174,42 @@ public class ReservationService
         }
 
         return reservation;
+    }
+
+    public async Task<ReservationQrVerificationResponse> VerifyQrAsync(string qrPayload)
+    {
+        if (string.IsNullOrWhiteSpace(qrPayload))
+        {
+            throw new InvalidOperationException("QR payload is required.");
+        }
+
+        var reservation = await _db.EnergyReservations
+            .Find(candidate => candidate.QrPayload == qrPayload.Trim())
+            .FirstOrDefaultAsync();
+
+        if (reservation is null)
+        {
+            throw new KeyNotFoundException("QR code is not recognized.");
+        }
+
+        if (reservation.Status != ReservationStatus.Approved)
+        {
+            throw new InvalidOperationException(
+                $"Reservation is not valid for transfer because its status is {reservation.Status}.");
+        }
+
+        return new ReservationQrVerificationResponse
+        {
+            ReservationId = reservation.Id,
+            ReservationCode = reservation.ReservationCode,
+            ProsumerNic = reservation.ProsumerNic,
+            StationName = reservation.StationName,
+            SlotStart = reservation.SlotStart,
+            SlotEnd = reservation.SlotEnd,
+            ReservationType = reservation.ReservationType,
+            EnergyKwh = reservation.EnergyKwh,
+            Status = reservation.Status
+        };
     }
 
     public async Task<EnergyReservation> UpdateAsync(
@@ -458,5 +496,14 @@ public class ReservationService
     private static string GenerateReservationCode()
     {
         return $"RSV-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(100000, 1000000)}";
+    }
+
+    private static string GenerateQrPayload(EnergyReservation reservation)
+    {
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+        return $"gridsync:v1:{reservation.Id}:{token}";
     }
 }
