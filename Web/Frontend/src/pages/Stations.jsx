@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1800&q=80";
+  "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2000&q=80";
 
 export default function Stations() {
   const { user } = useAuth();
@@ -118,26 +118,30 @@ export default function Stations() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
+    <div>
+      <section className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 -mt-8 mb-10 overflow-hidden">
         <div className="absolute inset-0">
           <img
             src={HERO_IMAGE}
             alt="Solar panels in a microgrid field"
-            className="h-full w-full object-cover"
+            className="gs-animate-pan h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-grid-900/92 via-grid-800/80 to-grid-700/45" />
+          <div className="absolute inset-0 bg-gradient-to-br from-grid-900/95 via-grid-800/80 to-grid-700/50" />
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-grid-50 to-transparent" />
         </div>
 
-        <div className="relative z-10 flex flex-col gap-6 px-6 py-10 sm:px-10 sm:py-12 lg:flex-row lg:items-end lg:justify-between">
+        <div className="relative z-10 mx-auto flex min-h-[20rem] max-w-6xl flex-col justify-end gap-6 px-4 pb-14 pt-20 sm:min-h-[24rem] sm:px-6 sm:pb-16 sm:pt-24 lg:min-h-[26rem] lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
+            <p className="gs-animate-fade-up text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
               {consoleLabel}
             </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
+            <h1 className="gs-animate-fade-up mt-3 text-4xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
               Solar stations
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
+            <p
+              className="gs-animate-fade-up mt-4 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base"
+              style={{ animationDelay: "120ms" }}
+            >
               {consoleBlurb}
             </p>
           </div>
@@ -145,7 +149,8 @@ export default function Stations() {
           {isBackoffice ? (
             <Link
               to="/stations/new"
-              className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50"
+              className="gs-animate-fade-up inline-flex items-center justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-grid-800 transition hover:bg-grid-50"
+              style={{ animationDelay: "220ms" }}
             >
               Create station
             </Link>
@@ -153,6 +158,7 @@ export default function Stations() {
         </div>
       </section>
 
+      <div className="space-y-8">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total stations" value={stats.total} />
         <StatCard label="Active" value={stats.active} />
@@ -300,6 +306,7 @@ export default function Stations() {
           )}
         </div>
       </section>
+      </div>
     </div>
   );
 }
