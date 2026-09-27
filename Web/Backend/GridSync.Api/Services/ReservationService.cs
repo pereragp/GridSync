@@ -277,6 +277,87 @@ public class ReservationService
         };
     }
 
+    /// <summary>Pending and approved (active) counts for one prosumer.</summary>
+    public async Task<ProsumerDashboardStatsResponse> GetProsumerDashboardStatsAsync(string prosumerId)
+    {
+        await ExpirePastReservationsAsync();
+        var now = DateTime.UtcNow;
+        var reservations = _db.EnergyReservations;
+
+        return new ProsumerDashboardStatsResponse
+        {
+            PendingReservations = await reservations.CountDocumentsAsync(
+                r => r.ProsumerId == prosumerId && r.Status == ReservationStatus.Pending),
+            ActiveReservations = await reservations.CountDocumentsAsync(
+                r => r.ProsumerId == prosumerId &&
+                     r.Status == ReservationStatus.Approved &&
+                     r.SlotEnd > now)
+        };
+    }
+
+    /// <summary>Search/filter bookings for the caller (own rows for prosumer; all for staff).</summary>
+    public async Task<List<EnergyReservation>> SearchAsync(
+        string userId,
+        bool staffAccess,
+        string? status,
+        string? stationId,
+        DateTime? from,
+        DateTime? to,
+        string? q)
+    {
+        await ExpirePastReservationsAsync();
+
+        var filter = staffAccess
+            ? Builders<EnergyReservation>.Filter.Empty
+            : Builders<EnergyReservation>.Filter.Eq(r => r.ProsumerId, userId);
+
+        if (!string.IsNullOrWhiteSpace(status))
+            filter &= Builders<EnergyReservation>.Filter.Eq(r => r.Status, status.Trim());
+
+        if (!string.IsNullOrWhiteSpace(stationId))
+        {
+            if (!ObjectId.TryParse(stationId, out _))
+                throw new InvalidOperationException("StationId must be a valid id.");
+            filter &= Builders<EnergyReservation>.Filter.Eq(r => r.StationId, stationId.Trim());
+        }
+
+        if (from.HasValue)
+        {
+            var fromUtc = from.Value.Kind == DateTimeKind.Utc
+                ? from.Value
+                : DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
+            filter &= Builders<EnergyReservation>.Filter.Gte(r => r.SlotStart, fromUtc);
+        }
+
+        if (to.HasValue)
+        {
+            var toUtc = to.Value.Kind == DateTimeKind.Utc
+                ? to.Value
+                : DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
+            filter &= Builders<EnergyReservation>.Filter.Lte(r => r.SlotStart, toUtc);
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            filter &= Builders<EnergyReservation>.Filter.Or(
+                Builders<EnergyReservation>.Filter.Regex(
+                    r => r.ReservationCode,
+                    new BsonRegularExpression(term, "i")),
+                Builders<EnergyReservation>.Filter.Regex(
+                    r => r.StationName!,
+                    new BsonRegularExpression(term, "i")),
+                Builders<EnergyReservation>.Filter.Regex(
+                    r => r.ProsumerNic,
+                    new BsonRegularExpression(term, "i")));
+        }
+
+        return await _db.EnergyReservations
+            .Find(filter)
+            .SortByDescending(r => r.SlotStart)
+            .ToListAsync();
+    }
+
     public async Task<EnergyReservation> UpdateAsync(
         string prosumerId,
         string reservationId,

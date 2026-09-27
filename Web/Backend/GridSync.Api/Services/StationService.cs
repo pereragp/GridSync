@@ -166,6 +166,36 @@ public class StationService
         return ToResponse(station);
     }
 
+    /// <summary>Returns active stations within radiusKm of the given coordinates.</summary>
+    public async Task<List<NearbyStationResponse>> GetNearbyAsync(double latitude, double longitude, double radiusKm)
+    {
+        if (latitude < -90 || latitude > 90)
+            throw new InvalidOperationException("Latitude must be between -90 and 90.");
+
+        if (longitude < -180 || longitude > 180)
+            throw new InvalidOperationException("Longitude must be between -180 and 180.");
+
+        if (radiusKm <= 0 || radiusKm > 500)
+            throw new InvalidOperationException("RadiusKm must be between 0 and 500.");
+
+        var stations = await _db.SolarStations
+            .Find(s => s.Status == StationStatus.Active)
+            .ToListAsync();
+
+        return stations
+            .Select(s =>
+            {
+                var lat = s.Location.Coordinates[1];
+                var lng = s.Location.Coordinates[0];
+                var distance = HaversineKm(latitude, longitude, lat, lng);
+                var response = ToNearbyResponse(s, distance);
+                return response;
+            })
+            .Where(s => s.DistanceKm <= radiusKm)
+            .OrderBy(s => s.DistanceKm)
+            .ToList();
+    }
+
     //------------------------------------------
     // DEACTIVATE a node (blocked if active reservations exist)
     public async Task<StationResponse> DeactivateAsync(string id)
@@ -226,9 +256,20 @@ public class StationService
         return code;
     }
 
-    /// <summary>
-    /// Maps a SolarStation database entity to a StationResponse DTO.
-    /// </summary>
+    /// <summary>Great-circle distance in km between two WGS84 points.</summary>
+    private static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double earthRadiusKm = 6371.0;
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return earthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+
     private static StationResponse ToResponse(SolarStation s) => new()
     {
         Id = s.Id,
@@ -247,6 +288,30 @@ public class StationService
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt
     };
+
+    private static NearbyStationResponse ToNearbyResponse(SolarStation s, double distanceKm)
+    {
+        var baseResponse = ToResponse(s);
+        return new NearbyStationResponse
+        {
+            Id = baseResponse.Id,
+            StationCode = baseResponse.StationCode,
+            Name = baseResponse.Name,
+            Description = baseResponse.Description,
+            Address = baseResponse.Address,
+            Longitude = baseResponse.Longitude,
+            Latitude = baseResponse.Latitude,
+            CapacityKw = baseResponse.CapacityKw,
+            CapacityKwh = baseResponse.CapacityKwh,
+            AvailableBatterySlots = baseResponse.AvailableBatterySlots,
+            Schedule = baseResponse.Schedule,
+            Status = baseResponse.Status,
+            CreatedBy = baseResponse.CreatedBy,
+            CreatedAt = baseResponse.CreatedAt,
+            UpdatedAt = baseResponse.UpdatedAt,
+            DistanceKm = Math.Round(distanceKm, 2)
+        };
+    }
 
 }
 

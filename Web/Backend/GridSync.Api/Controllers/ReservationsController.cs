@@ -259,14 +259,50 @@ public class ReservationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// GET /api/reservations/dashboard-stats
-    /// </summary>
+    /// <summary>GET /api/reservations/dashboard-stats — operator operational counts.</summary>
     [HttpGet("dashboard-stats")]
     [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> DashboardStats()
     {
         return Ok(await _reservationService.GetDashboardStatsAsync());
+    }
+
+    /// <summary>GET /api/reservations/prosumer-dashboard — pending and active counts.</summary>
+    [HttpGet("prosumer-dashboard")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> ProsumerDashboard()
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+
+        return Ok(await _reservationService.GetProsumerDashboardStatsAsync(prosumerId));
+    }
+
+    /// <summary>GET /api/reservations/search?status=&amp;stationId=&amp;from=&amp;to=&amp;q=</summary>
+    [HttpGet("search")]
+    public async Task<IActionResult> Search(
+        [FromQuery] string? status,
+        [FromQuery] string? stationId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? q)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+
+        var staffAccess = User.IsInRole(UserRoles.Backoffice) || User.IsInRole(UserRoles.GridOperator);
+        try
+        {
+            var results = await _reservationService.SearchAsync(
+                userId, staffAccess, status, stationId, from, to, q);
+            return Ok(results);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     private async Task<IActionResult> Review(string id, bool approve, ReviewReservationRequest request)
