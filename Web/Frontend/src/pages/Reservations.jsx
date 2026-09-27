@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
 import {
@@ -12,7 +12,6 @@ import {
 import {
   Alert,
   Field,
-  PageHeader,
   btnPrimary,
   btnSecondary,
   cardClass,
@@ -73,12 +72,14 @@ export default function Reservations() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [form, setForm] = useState(emptyCreateForm);
+  const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [actionId, setActionId] = useState("");
+  const createPanelRef = useRef(null);
 
   const loadSlots = useCallback(async () => {
     try {
@@ -113,14 +114,30 @@ export default function Reservations() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (showCreate && createPanelRef.current) {
+      createPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [showCreate]);
+
   const stations = useMemo(() => {
     const byId = new Map();
     for (const slot of availableSlots) {
-      if (!slot.stationId || byId.has(slot.stationId)) continue;
-      byId.set(slot.stationId, {
-        id: slot.stationId,
-        name: slot.stationName || "Unknown station",
-      });
+      if (!slot.stationId) continue;
+      const existing = byId.get(slot.stationId);
+      if (existing) {
+        existing.batteryCount += 1;
+        existing.chargeAvail += Number(slot.availableChargingKwh) || 0;
+        existing.dropOffAvail += Number(slot.availableDropOffKwh) || 0;
+      } else {
+        byId.set(slot.stationId, {
+          id: slot.stationId,
+          name: slot.stationName || "Unknown station",
+          batteryCount: 1,
+          chargeAvail: Number(slot.availableChargingKwh) || 0,
+          dropOffAvail: Number(slot.availableDropOffKwh) || 0,
+        });
+      }
     }
     return [...byId.values()].sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
@@ -144,6 +161,21 @@ export default function Reservations() {
       ? selectedSlot.availableDropOffKwh
       : selectedSlot.availableChargingKwh
     : 0;
+
+  const stats = useMemo(() => {
+    const pending = upcomingReservations.filter(
+      (r) => r.status === "Pending",
+    ).length;
+    const approved = upcomingReservations.filter(
+      (r) => r.status === "Approved",
+    ).length;
+    return {
+      upcoming: upcomingReservations.length,
+      pending,
+      approved,
+      history: reservations.length,
+    };
+  }, [upcomingReservations, reservations]);
 
   const normalizedSearch = search.trim().toLowerCase();
   function matchesFilters(reservation) {
@@ -170,6 +202,17 @@ export default function Reservations() {
   function clearFeedback() {
     setError("");
     setMessage("");
+  }
+
+  function openCreate() {
+    clearFeedback();
+    setForm(emptyCreateForm());
+    setShowCreate(true);
+  }
+
+  function closeCreate() {
+    setShowCreate(false);
+    setForm(emptyCreateForm());
   }
 
   async function onCreate(e) {
@@ -199,6 +242,7 @@ export default function Reservations() {
       });
       setMessage("Reservation created and is pending review.");
       setForm(emptyCreateForm());
+      setShowCreate(false);
       await Promise.all([load(), loadSlots()]);
     } catch (err) {
       setError(err.message || "Failed to create reservation");
@@ -259,151 +303,323 @@ export default function Reservations() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Reservations"
-        subtitle="Book Charging or Drop-off energy against a station battery, then track approvals and QR codes."
-      />
+    <div className="space-y-6">
+      {/* Dashboard header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-grid-900 sm:text-3xl">
+            Reservations
+          </h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Track upcoming visits and past bookings. Create a new Charging or
+            Drop-off reservation when you are ready.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => (showCreate ? closeCreate() : openCreate())}
+          className={showCreate ? btnSecondary : btnPrimary}
+        >
+          {showCreate ? "Close form" : "Create reservation"}
+        </button>
+      </div>
+
       {error ? <Alert>{error}</Alert> : null}
       {message ? <Alert type="success">{message}</Alert> : null}
 
-      <section className={`${cardClass} mb-6`}>
-        <h2 className="mb-1 text-lg font-medium">Create reservation</h2>
-        <p className="mb-4 text-sm text-slate-600">
-          Choose a station, then pick an available battery. Select Charging
-          (deposit energy) or Drop-off (withdraw energy), enter kWh, and set your
-          visit window within the next 7 days.
-        </p>
-        <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-2">
-          <Field label="Station">
-            <select
-              className={inputClass}
-              value={form.stationId}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  stationId: e.target.value,
-                  slotId: "",
-                })
-              }
-              required
-              disabled={stations.length === 0}
-            >
-              <option value="">
-                {stations.length
-                  ? "Select a station"
-                  : "No stations with available batteries"}
-              </option>
-              {stations.map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Battery">
-            <select
-              className={inputClass}
-              value={form.slotId}
-              onChange={(e) => setForm({ ...form, slotId: e.target.value })}
-              required
-              disabled={!form.stationId || batteriesForStation.length === 0}
-            >
-              <option value="">
-                {!form.stationId
-                  ? "Select a station first"
-                  : batteriesForStation.length
-                    ? "Select a battery"
-                    : "No batteries available at this station"}
-              </option>
-              {batteriesForStation.map((slot) => (
-                <option key={slot.id} value={slot.id}>
-                  Battery #{slot.batteryIndex} · Cap {slot.capacityKwh} kWh ·
-                  Charge avail {Number(slot.availableChargingKwh).toFixed(1)} ·
-                  Drop-off avail {Number(slot.availableDropOffKwh).toFixed(1)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Reservation type">
-            <select
-              className={inputClass}
-              value={form.reservationType}
-              onChange={(e) =>
-                setForm({ ...form, reservationType: e.target.value })
-              }
-            >
-              <option value="Charging">Charging (deposit into battery)</option>
-              <option value="DropOff">Drop-off (withdraw stored energy)</option>
-            </select>
-          </Field>
-          <Field
-            label={`Energy (kWh)${
-              selectedSlot
-                ? ` — up to ${Number(availableForType).toFixed(2)} available`
-                : ""
-            }`}
-          >
-            <input
-              className={inputClass}
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={form.energyKwh}
-              onChange={(e) => setForm({ ...form, energyKwh: e.target.value })}
-              required
-              placeholder="e.g. 5"
-            />
-          </Field>
-          {selectedSlot ? (
-            <div className="mb-3 self-end rounded-lg border border-grid-100 bg-grid-50 px-3 py-2 text-sm text-slate-700 md:col-span-2">
-              <p className="font-medium text-grid-900">
-                {selectedSlot.stationName} · Battery #{selectedSlot.batteryIndex}
-              </p>
-              <p>
-                Actual stored:{" "}
-                <strong>{Number(selectedSlot.actualEnergyKwh).toFixed(2)} kWh</strong>
-                {" · "}
-                Capacity:{" "}
-                <strong>{Number(selectedSlot.capacityKwh).toFixed(2)} kWh</strong>
-              </p>
-            </div>
-          ) : null}
-          <Field label="Visit start">
-            <input
-              className={inputClass}
-              type="datetime-local"
-              value={form.slotStart}
-              onChange={(e) => setForm({ ...form, slotStart: e.target.value })}
-              required
-            />
-          </Field>
-          <Field label="Visit end">
-            <input
-              className={inputClass}
-              type="datetime-local"
-              value={form.slotEnd}
-              onChange={(e) => setForm({ ...form, slotEnd: e.target.value })}
-              required
-            />
-          </Field>
-          <div className="md:col-span-2">
-            <button className={btnPrimary} disabled={submitting}>
-              {submitting ? "Creating…" : "Create reservation"}
-            </button>
-          </div>
-        </form>
+      {/* Stats */}
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Upcoming" value={stats.upcoming} />
+        <StatCard label="Pending review" value={stats.pending} />
+        <StatCard label="Approved" value={stats.approved} accent />
+        <StatCard label="History" value={stats.history} />
       </section>
 
-      <section className={`${cardClass} mb-6`}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">Upcoming reservations</h2>
-          <span className="text-sm text-slate-500">
-            Showing {filteredUpcomingReservations.length} of{" "}
-            {upcomingReservations.length}
-          </span>
-        </div>
-        <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+      {/* Create panel (toggled) */}
+      {showCreate ? (
+        <section
+          ref={createPanelRef}
+          className={`${cardClass} border-grid-200 ring-1 ring-grid-500/10`}
+        >
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-grid-900">
+              Create reservation
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Choose a station, then an available battery. Set type, energy, and
+              a visit window within the next 7 days.
+            </p>
+          </div>
+          <form onSubmit={onCreate} className="space-y-6">
+            {/* Step 1 — Station */}
+            <div>
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Step 1
+                  </p>
+                  <h3 className="text-base font-semibold text-grid-900">
+                    Choose a station
+                  </h3>
+                </div>
+                {form.stationId ? (
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-grid-700 hover:text-grid-900"
+                    onClick={() =>
+                      setForm({ ...form, stationId: "", slotId: "" })
+                    }
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              {stations.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No stations with available batteries right now.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {stations.map((station) => {
+                    const selected = form.stationId === station.id;
+                    return (
+                      <button
+                        key={station.id}
+                        type="button"
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            stationId: station.id,
+                            slotId: "",
+                          })
+                        }
+                        className={`rounded-xl border p-4 text-left transition ${
+                          selected
+                            ? "border-grid-600 bg-grid-50 ring-2 ring-grid-500/25"
+                            : "border-slate-200 bg-white hover:border-grid-300 hover:bg-grid-50/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-grid-900">
+                            {station.name}
+                          </p>
+                          {selected ? (
+                            <span className="rounded-md bg-grid-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                              Selected
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm text-slate-600">
+                          {station.batteryCount}{" "}
+                          {station.batteryCount === 1 ? "battery" : "batteries"}{" "}
+                          available
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                          <span>
+                            Charge{" "}
+                            <strong className="text-slate-700">
+                              {station.chargeAvail.toFixed(1)} kWh
+                            </strong>
+                          </span>
+                          <span>
+                            Drop-off{" "}
+                            <strong className="text-slate-700">
+                              {station.dropOffAvail.toFixed(1)} kWh
+                            </strong>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Step 2 — Battery */}
+            <div>
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Step 2
+                </p>
+                <h3 className="text-base font-semibold text-grid-900">
+                  Choose a battery
+                </h3>
+              </div>
+              {!form.stationId ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  Select a station to see its batteries.
+                </p>
+              ) : batteriesForStation.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  No batteries available at this station.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {batteriesForStation.map((slot) => {
+                    const selected = form.slotId === slot.id;
+                    const capacity = Number(slot.capacityKwh) || 0;
+                    const actual = Number(slot.actualEnergyKwh) || 0;
+                    const fillPct =
+                      capacity > 0
+                        ? Math.min(100, Math.round((actual / capacity) * 100))
+                        : 0;
+                    return (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        onClick={() =>
+                          setForm({ ...form, slotId: slot.id })
+                        }
+                        className={`rounded-xl border p-4 text-left transition ${
+                          selected
+                            ? "border-grid-600 bg-grid-50 ring-2 ring-grid-500/25"
+                            : "border-slate-200 bg-white hover:border-grid-300 hover:bg-grid-50/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-grid-900">
+                            Battery #{slot.batteryIndex}
+                          </p>
+                          {selected ? (
+                            <span className="rounded-md bg-grid-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                              Selected
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-3">
+                          <div className="mb-1 flex justify-between text-xs text-slate-500">
+                            <span>Stored</span>
+                            <span>
+                              {actual.toFixed(1)} / {capacity.toFixed(1)} kWh
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-grid-600 transition-all"
+                              style={{ width: `${fillPct}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-slate-200/80">
+                            <p className="text-slate-500">Charge avail</p>
+                            <p className="mt-0.5 font-semibold text-grid-800">
+                              {Number(slot.availableChargingKwh).toFixed(1)} kWh
+                            </p>
+                          </div>
+                          <div className="rounded-lg bg-white/80 px-2.5 py-2 ring-1 ring-slate-200/80">
+                            <p className="text-slate-500">Drop-off avail</p>
+                            <p className="mt-0.5 font-semibold text-grid-800">
+                              {Number(slot.availableDropOffKwh).toFixed(1)} kWh
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Step 3 — Details */}
+            <div>
+              <div className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Step 3
+                </p>
+                <h3 className="text-base font-semibold text-grid-900">
+                  Reservation details
+                </h3>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Field label="Reservation type">
+                  <select
+                    className={inputClass}
+                    value={form.reservationType}
+                    onChange={(e) =>
+                      setForm({ ...form, reservationType: e.target.value })
+                    }
+                  >
+                    <option value="Charging">
+                      Charging (deposit into battery)
+                    </option>
+                    <option value="DropOff">
+                      Drop-off (withdraw stored energy)
+                    </option>
+                  </select>
+                </Field>
+                <Field
+                  label={`Energy (kWh)${
+                    selectedSlot
+                      ? ` — up to ${Number(availableForType).toFixed(2)} available`
+                      : ""
+                  }`}
+                >
+                  <input
+                    className={inputClass}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.energyKwh}
+                    onChange={(e) =>
+                      setForm({ ...form, energyKwh: e.target.value })
+                    }
+                    required
+                    placeholder="e.g. 5"
+                    disabled={!form.slotId}
+                  />
+                </Field>
+                <Field label="Visit start">
+                  <input
+                    className={inputClass}
+                    type="datetime-local"
+                    value={form.slotStart}
+                    onChange={(e) =>
+                      setForm({ ...form, slotStart: e.target.value })
+                    }
+                    required
+                  />
+                </Field>
+                <Field label="Visit end">
+                  <input
+                    className={inputClass}
+                    type="datetime-local"
+                    value={form.slotEnd}
+                    onChange={(e) =>
+                      setForm({ ...form, slotEnd: e.target.value })
+                    }
+                    required
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              <button
+                className={btnPrimary}
+                disabled={submitting || !form.stationId || !form.slotId}
+              >
+                {submitting ? "Creating…" : "Submit reservation"}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary}
+                onClick={closeCreate}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
+      {/* Shared filters */}
+      <section className={`${cardClass}`}>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Filters
+        </h2>
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-700">Search</span>
             <input
@@ -462,57 +678,106 @@ export default function Reservations() {
             </label>
           </div>
         </div>
-        {loading ? <p className="text-sm text-slate-500">Loading…</p> : null}
-        {!loading && filteredUpcomingReservations.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No upcoming reservations found for this filter.
-          </p>
-        ) : null}
-        <div className="space-y-3">
-          {filteredUpcomingReservations.map((reservation) => (
-            <ReservationItem
-              key={reservation.id}
-              reservation={reservation}
-              draft={editing[reservation.id]}
-              onDraftChange={(draft) =>
-                setEditing({ ...editing, [reservation.id]: draft })
-              }
-              onUpdate={() => onUpdate(reservation)}
-              onCancel={() => onCancel(reservation)}
-              busy={actionId === reservation.id}
-            />
-          ))}
-        </div>
       </section>
 
-      <section className={cardClass}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">Booking history</h2>
-          <span className="text-sm text-slate-500">
-            Showing {filteredReservations.length} of {reservations.length}
-          </span>
-        </div>
-        {!loading && filteredReservations.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No past reservations found for this filter.
-          </p>
-        ) : null}
-        <div className="space-y-3">
-          {filteredReservations.map((reservation) => (
-            <ReservationItem
-              key={reservation.id}
-              reservation={reservation}
-              draft={editing[reservation.id]}
-              onDraftChange={(draft) =>
-                setEditing({ ...editing, [reservation.id]: draft })
-              }
-              onUpdate={() => onUpdate(reservation)}
-              onCancel={() => onCancel(reservation)}
-              busy={actionId === reservation.id}
-            />
-          ))}
-        </div>
-      </section>
+      {/* Upcoming + history side by side */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <section className={`${cardClass} flex min-h-0 flex-col`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-grid-900">
+                Upcoming reservations
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Showing {filteredUpcomingReservations.length} of{" "}
+                {upcomingReservations.length}
+              </p>
+            </div>
+          </div>
+          {loading ? <p className="text-sm text-slate-500">Loading…</p> : null}
+          {!loading && filteredUpcomingReservations.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+              <p className="text-sm text-slate-500">
+                No upcoming reservations for this filter.
+              </p>
+              <button
+                type="button"
+                onClick={openCreate}
+                className={`${btnPrimary} mt-4`}
+              >
+                Create reservation
+              </button>
+            </div>
+          ) : null}
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+            {filteredUpcomingReservations.map((reservation) => (
+              <ReservationItem
+                key={reservation.id}
+                reservation={reservation}
+                draft={editing[reservation.id]}
+                onDraftChange={(draft) =>
+                  setEditing({ ...editing, [reservation.id]: draft })
+                }
+                onUpdate={() => onUpdate(reservation)}
+                onCancel={() => onCancel(reservation)}
+                busy={actionId === reservation.id}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section className={`${cardClass} flex min-h-0 flex-col`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-grid-900">
+                Booking history
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Showing {filteredReservations.length} of {reservations.length}
+              </p>
+            </div>
+          </div>
+          {!loading && filteredReservations.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No past reservations found for this filter.
+            </p>
+          ) : null}
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+            {filteredReservations.map((reservation) => (
+              <ReservationItem
+                key={reservation.id}
+                reservation={reservation}
+                draft={editing[reservation.id]}
+                onDraftChange={(draft) =>
+                  setEditing({ ...editing, [reservation.id]: draft })
+                }
+                onUpdate={() => onUpdate(reservation)}
+                onCancel={() => onCancel(reservation)}
+                busy={actionId === reservation.id}
+              />
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent = false }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 ${
+        accent
+          ? "border-grid-200 bg-grid-50"
+          : "border-slate-200 bg-white"
+      }`}
+    >
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-grid-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -525,6 +790,7 @@ function ReservationItem({
   onCancel,
   busy,
 }) {
+  const [showQr, setShowQr] = useState(false);
   const editable = reservation.status === "Pending";
   const activeDraft =
     draft ||
@@ -537,8 +803,11 @@ function ReservationItem({
         }
       : null);
 
+  const hasQr =
+    reservation.status === "Approved" && Boolean(reservation.qrPayload);
+
   return (
-    <article className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+    <article className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium text-slate-900">
@@ -556,7 +825,18 @@ function ReservationItem({
             {formatDate(reservation.slotEnd)}
           </p>
         </div>
-        <StatusBadge status={reservation.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={reservation.status} />
+          {hasQr ? (
+            <button
+              type="button"
+              className={btnSecondary}
+              onClick={() => setShowQr((open) => !open)}
+            >
+              {showQr ? "Hide QR" : "Show QR"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {editable && activeDraft ? (
@@ -649,7 +929,7 @@ function ReservationItem({
           Cancellation reason: {reservation.cancellationReason}
         </p>
       ) : null}
-      {reservation.status === "Approved" && reservation.qrPayload ? (
+      {hasQr && showQr ? (
         <div className="mt-4 flex flex-wrap items-center gap-4 rounded-md border border-teal-100 bg-teal-50 p-3">
           <QRCodeCanvas
             id={`reservation-qr-${reservation.id}`}
