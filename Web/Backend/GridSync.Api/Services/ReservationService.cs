@@ -21,9 +21,7 @@ public class ReservationService
         var reservation = await FindRequiredAsync(reservationId);
 
         if (!staffAccess && reservation.ProsumerId != userId)
-        {
             throw new KeyNotFoundException("Reservation not found.");
-        }
 
         return reservation;
     }
@@ -32,20 +30,14 @@ public class ReservationService
     {
         await ExpirePastReservationsAsync();
 
-        var filter = Builders<EnergyReservation>.Filter.Eq(reservation => reservation.ProsumerId, prosumerId);
+        var filter = Builders<EnergyReservation>.Filter.Eq(r => r.ProsumerId, prosumerId);
 
         if (!string.IsNullOrWhiteSpace(status))
-        {
-            filter &= Builders<EnergyReservation>.Filter.Eq(
-                reservation => reservation.Status,
-                status.Trim());
-        }
+            filter &= Builders<EnergyReservation>.Filter.Eq(r => r.Status, status.Trim());
 
         return await _db.EnergyReservations
-            .Find(filter & Builders<EnergyReservation>.Filter.Lte(
-                reservation => reservation.SlotEnd,
-                DateTime.UtcNow))
-            .SortByDescending(reservation => reservation.SlotStart)
+            .Find(filter & Builders<EnergyReservation>.Filter.Lte(r => r.SlotEnd, DateTime.UtcNow))
+            .SortByDescending(r => r.SlotStart)
             .ToListAsync();
     }
 
@@ -53,19 +45,15 @@ public class ReservationService
     {
         await ExpirePastReservationsAsync();
 
-        var filter = Builders<EnergyReservation>.Filter.Eq(reservation => reservation.ProsumerId, prosumerId) &
-                     Builders<EnergyReservation>.Filter.Gt(reservation => reservation.SlotEnd, DateTime.UtcNow);
+        var filter = Builders<EnergyReservation>.Filter.Eq(r => r.ProsumerId, prosumerId) &
+                     Builders<EnergyReservation>.Filter.Gt(r => r.SlotEnd, DateTime.UtcNow);
 
         if (!string.IsNullOrWhiteSpace(status))
-        {
-            filter &= Builders<EnergyReservation>.Filter.Eq(
-                reservation => reservation.Status,
-                status.Trim());
-        }
+            filter &= Builders<EnergyReservation>.Filter.Eq(r => r.Status, status.Trim());
 
         return await _db.EnergyReservations
             .Find(filter)
-            .SortBy(reservation => reservation.SlotStart)
+            .SortBy(r => r.SlotStart)
             .ToListAsync();
     }
 
@@ -75,53 +63,46 @@ public class ReservationService
 
         var filter = Builders<EnergyReservation>.Filter.Empty;
         if (!string.IsNullOrWhiteSpace(status))
-        {
-            filter = Builders<EnergyReservation>.Filter.Eq(
-                reservation => reservation.Status,
-                status.Trim());
-        }
+            filter = Builders<EnergyReservation>.Filter.Eq(r => r.Status, status.Trim());
 
         return await _db.EnergyReservations
             .Find(filter)
-            .SortBy(reservation => reservation.SlotStart)
+            .SortBy(r => r.SlotStart)
             .ToListAsync();
     }
 
+    /// <summary>Lists open batteries on active stations with Charging/DropOff availability.</summary>
     public async Task<List<AvailableBookingSlotResponse>> GetAvailableSlotsAsync()
     {
-        var now = DateTime.UtcNow;
         var slots = await _db.EnergyBookingSlots
-            .Find(slot => slot.Status == SlotStatus.Available &&
-                         slot.SlotStart > now &&
-                         slot.SlotStart <= now.AddDays(7) &&
-                         slot.ReservedCount < slot.MaxReservations)
-            .SortBy(slot => slot.SlotStart)
+            .Find(slot => slot.Status == SlotStatus.Available)
+            .SortBy(slot => slot.StationId)
+            .ThenBy(slot => slot.BatteryIndex)
             .ToListAsync();
 
         if (slots.Count == 0)
-        {
             return [];
-        }
 
-        var stationIds = slots.Select(slot => slot.StationId).Distinct().ToList();
+        var stationIds = slots.Select(s => s.StationId).Distinct().ToList();
         var stations = await _db.SolarStations
-            .Find(station => stationIds.Contains(station.Id) && station.Status == StationStatus.Active)
+            .Find(s => stationIds.Contains(s.Id) && s.Status == StationStatus.Active)
             .ToListAsync();
-        var stationNames = stations.ToDictionary(station => station.Id, station => station.Name);
+        var stationNames = stations.ToDictionary(s => s.Id, s => s.Name);
 
         return slots
-            .Where(slot => stationNames.ContainsKey(slot.StationId))
-            .Select(slot => new AvailableBookingSlotResponse
+            .Where(s => stationNames.ContainsKey(s.StationId))
+            .Select(s => new AvailableBookingSlotResponse
             {
-                Id = slot.Id,
-                StationId = slot.StationId,
-                StationName = stationNames[slot.StationId],
-                SlotStart = slot.SlotStart,
-                SlotEnd = slot.SlotEnd,
-                EnergyKwh = slot.EnergyKwh,
-                AvailableReservations = Math.Max(slot.MaxReservations - slot.ReservedCount, 0),
-                Status = slot.Status,
-                Notes = slot.Notes
+                Id = s.Id,
+                StationId = s.StationId,
+                StationName = stationNames[s.StationId],
+                BatteryIndex = s.BatteryIndex,
+                CapacityKwh = s.CapacityKwh,
+                ActualEnergyKwh = s.ActualEnergyKwh,
+                AvailableChargingKwh = AvailableCharging(s),
+                AvailableDropOffKwh = AvailableDropOff(s),
+                Status = s.Status,
+                Notes = s.Notes
             })
             .ToList();
     }
@@ -135,9 +116,7 @@ public class ReservationService
         var reservation = await FindRequiredAsync(reservationId);
 
         if (reservation.Status != ReservationStatus.Pending)
-        {
             throw new InvalidOperationException("Only pending reservations can be approved or rejected.");
-        }
 
         if (approve)
         {
@@ -148,9 +127,7 @@ public class ReservationService
         else
         {
             if (string.IsNullOrWhiteSpace(request.Reason))
-            {
                 throw new InvalidOperationException("A rejection reason is required.");
-            }
 
             reservation.Status = ReservationStatus.Rejected;
             reservation.RejectionReason = request.Reason.Trim();
@@ -160,18 +137,14 @@ public class ReservationService
 
         reservation.UpdatedAt = DateTime.UtcNow;
         var result = await _db.EnergyReservations.ReplaceOneAsync(
-            candidate => candidate.Id == reservation.Id && candidate.Status == ReservationStatus.Pending,
+            c => c.Id == reservation.Id && c.Status == ReservationStatus.Pending,
             reservation);
 
         if (result.ModifiedCount != 1)
-        {
             throw new InvalidOperationException("Reservation status has already changed.");
-        }
 
         if (!approve)
-        {
-            await ReleaseSlotAsync(reservation.SlotId);
-        }
+            await ReleaseReservedEnergyAsync(reservation);
 
         return reservation;
     }
@@ -179,24 +152,18 @@ public class ReservationService
     public async Task<ReservationQrVerificationResponse> VerifyQrAsync(string qrPayload)
     {
         if (string.IsNullOrWhiteSpace(qrPayload))
-        {
             throw new InvalidOperationException("QR payload is required.");
-        }
 
         var reservation = await _db.EnergyReservations
-            .Find(candidate => candidate.QrPayload == qrPayload.Trim())
+            .Find(c => c.QrPayload == qrPayload.Trim())
             .FirstOrDefaultAsync();
 
         if (reservation is null)
-        {
             throw new KeyNotFoundException("QR code is not recognized.");
-        }
 
         if (reservation.Status != ReservationStatus.Approved)
-        {
             throw new InvalidOperationException(
                 $"Reservation is not valid for transfer because its status is {reservation.Status}.");
-        }
 
         return new ReservationQrVerificationResponse
         {
@@ -212,21 +179,17 @@ public class ReservationService
         };
     }
 
-    public async Task<ReservationCompletionResponse> CompleteAsync(
-        string operatorId,
-        string reservationId)
+    public async Task<ReservationCompletionResponse> CompleteAsync(string operatorId, string reservationId)
     {
         var reservation = await FindRequiredAsync(reservationId);
         if (reservation.Status != ReservationStatus.Approved)
-        {
             throw new InvalidOperationException(
                 $"Only approved reservations can be completed. Current status: {reservation.Status}.");
-        }
 
         if (string.IsNullOrWhiteSpace(reservation.QrPayload))
-        {
             throw new InvalidOperationException("Reservation does not have a QR code.");
-        }
+
+        await ApplyCompletionInventoryAsync(reservation);
 
         var completedAt = DateTime.UtcNow;
         reservation.Status = ReservationStatus.Completed;
@@ -235,14 +198,11 @@ public class ReservationService
         reservation.UpdatedAt = completedAt;
 
         var result = await _db.EnergyReservations.ReplaceOneAsync(
-            candidate => candidate.Id == reservation.Id &&
-                         candidate.Status == ReservationStatus.Approved,
+            c => c.Id == reservation.Id && c.Status == ReservationStatus.Approved,
             reservation);
 
         if (result.ModifiedCount != 1)
-        {
             throw new InvalidOperationException("Reservation status has already changed.");
-        }
 
         return new ReservationCompletionResponse
         {
@@ -263,21 +223,20 @@ public class ReservationService
         return new ReservationDashboardStatsResponse
         {
             PendingReservations = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Pending),
+                r => r.Status == ReservationStatus.Pending),
             ApprovedUpcomingReservations = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Approved && reservation.SlotEnd > now),
+                r => r.Status == ReservationStatus.Approved && r.SlotEnd > now),
             CompletedTransfers = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Completed),
+                r => r.Status == ReservationStatus.Completed),
             RejectedReservations = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Rejected),
+                r => r.Status == ReservationStatus.Rejected),
             CancelledReservations = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Cancelled),
+                r => r.Status == ReservationStatus.Cancelled),
             ExpiredReservations = await reservations.CountDocumentsAsync(
-                reservation => reservation.Status == ReservationStatus.Expired)
+                r => r.Status == ReservationStatus.Expired)
         };
     }
 
-    /// <summary>Pending and approved (active) counts for one prosumer.</summary>
     public async Task<ProsumerDashboardStatsResponse> GetProsumerDashboardStatsAsync(string prosumerId)
     {
         await ExpirePastReservationsAsync();
@@ -295,7 +254,6 @@ public class ReservationService
         };
     }
 
-    /// <summary>Search/filter bookings for the caller (own rows for prosumer; all for staff).</summary>
     public async Task<List<EnergyReservation>> SearchAsync(
         string userId,
         bool staffAccess,
@@ -323,17 +281,13 @@ public class ReservationService
 
         if (from.HasValue)
         {
-            var fromUtc = from.Value.Kind == DateTimeKind.Utc
-                ? from.Value
-                : DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
+            var fromUtc = EnsureUtc(from.Value);
             filter &= Builders<EnergyReservation>.Filter.Gte(r => r.SlotStart, fromUtc);
         }
 
         if (to.HasValue)
         {
-            var toUtc = to.Value.Kind == DateTimeKind.Utc
-                ? to.Value
-                : DateTime.SpecifyKind(to.Value, DateTimeKind.Utc);
+            var toUtc = EnsureUtc(to.Value);
             filter &= Builders<EnergyReservation>.Filter.Lte(r => r.SlotStart, toUtc);
         }
 
@@ -342,14 +296,11 @@ public class ReservationService
             var term = q.Trim();
             filter &= Builders<EnergyReservation>.Filter.Or(
                 Builders<EnergyReservation>.Filter.Regex(
-                    r => r.ReservationCode,
-                    new BsonRegularExpression(term, "i")),
+                    r => r.ReservationCode, new BsonRegularExpression(term, "i")),
                 Builders<EnergyReservation>.Filter.Regex(
-                    r => r.StationName!,
-                    new BsonRegularExpression(term, "i")),
+                    r => r.StationName!, new BsonRegularExpression(term, "i")),
                 Builders<EnergyReservation>.Filter.Regex(
-                    r => r.ProsumerNic,
-                    new BsonRegularExpression(term, "i")));
+                    r => r.ProsumerNic, new BsonRegularExpression(term, "i")));
         }
 
         return await _db.EnergyReservations
@@ -366,24 +317,36 @@ public class ReservationService
         var reservation = await FindOwnedAsync(prosumerId, reservationId);
 
         if (reservation.Status != ReservationStatus.Pending)
-        {
             throw new InvalidOperationException("Only pending reservations can be updated.");
-        }
 
         if (reservation.SlotStart - DateTime.UtcNow < TimeSpan.FromHours(12))
-        {
-            throw new InvalidOperationException("Reservations can only be updated at least 12 hours before the slot starts.");
-        }
+            throw new InvalidOperationException(
+                "Reservations can only be updated at least 12 hours before the slot starts.");
 
-        if (request.ReservationType is not (ReservationTypes.Charging or ReservationTypes.DropOff))
+        ValidateVisitWindow(request.SlotStart, request.SlotEnd);
+        ValidateEnergyAndType(request.ReservationType, request.EnergyKwh);
+
+        // Release old reserved amount, then reserve the new amount.
+        await ReleaseReservedEnergyAsync(reservation);
+
+        try
         {
-            throw new InvalidOperationException("ReservationType must be Charging or DropOff.");
+            await ReserveEnergyAsync(reservation.SlotId, request.ReservationType, request.EnergyKwh);
+        }
+        catch
+        {
+            await ReserveEnergyAsync(reservation.SlotId, reservation.ReservationType, reservation.EnergyKwh);
+            throw;
         }
 
         reservation.ReservationType = request.ReservationType;
+        reservation.EnergyKwh = request.EnergyKwh;
+        reservation.SlotStart = EnsureUtc(request.SlotStart);
+        reservation.SlotEnd = EnsureUtc(request.SlotEnd);
         reservation.UpdatedAt = DateTime.UtcNow;
+
         await _db.EnergyReservations.ReplaceOneAsync(
-            candidate => candidate.Id == reservation.Id && candidate.ProsumerId == prosumerId,
+            c => c.Id == reservation.Id && c.ProsumerId == prosumerId,
             reservation);
 
         return reservation;
@@ -396,15 +359,13 @@ public class ReservationService
     {
         var reservation = await FindOwnedAsync(prosumerId, reservationId);
 
-        if (reservation.Status is ReservationStatus.Cancelled or ReservationStatus.Completed or ReservationStatus.Rejected)
-        {
+        if (reservation.Status is ReservationStatus.Cancelled or ReservationStatus.Completed
+            or ReservationStatus.Rejected)
             throw new InvalidOperationException("Reservation cannot be cancelled in its current status.");
-        }
 
         if (reservation.SlotStart - DateTime.UtcNow < TimeSpan.FromHours(12))
-        {
-            throw new InvalidOperationException("Reservations can only be cancelled at least 12 hours before the slot starts.");
-        }
+            throw new InvalidOperationException(
+                "Reservations can only be cancelled at least 12 hours before the slot starts.");
 
         reservation.Status = ReservationStatus.Cancelled;
         reservation.CancellationReason = string.IsNullOrWhiteSpace(request.Reason)
@@ -414,17 +375,15 @@ public class ReservationService
         reservation.UpdatedAt = DateTime.UtcNow;
 
         var result = await _db.EnergyReservations.ReplaceOneAsync(
-            candidate => candidate.Id == reservation.Id &&
-                         candidate.ProsumerId == prosumerId &&
-                         candidate.Status != ReservationStatus.Cancelled,
+            c => c.Id == reservation.Id &&
+                 c.ProsumerId == prosumerId &&
+                 c.Status != ReservationStatus.Cancelled,
             reservation);
 
         if (result.ModifiedCount != 1)
-        {
             throw new InvalidOperationException("Reservation has already been cancelled.");
-        }
 
-        await ReleaseSlotAsync(reservation.SlotId);
+        await ReleaseReservedEnergyAsync(reservation);
 
         return reservation;
     }
@@ -432,105 +391,58 @@ public class ReservationService
     public async Task<EnergyReservation> CreateAsync(string prosumerId, CreateReservationRequest request)
     {
         if (!ObjectId.TryParse(prosumerId, out _))
-        {
             throw new InvalidOperationException("The authenticated user id is invalid.");
-        }
 
         if (!ObjectId.TryParse(request.SlotId, out _))
-        {
             throw new InvalidOperationException("SlotId must be a valid id.");
-        }
 
-        if (request.ReservationType is not (ReservationTypes.Charging or ReservationTypes.DropOff))
-        {
-            throw new InvalidOperationException("ReservationType must be Charging or DropOff.");
-        }
+        ValidateEnergyAndType(request.ReservationType, request.EnergyKwh);
+        ValidateVisitWindow(request.SlotStart, request.SlotEnd);
 
-        var prosumer = await _db.Users
-            .Find(user => user.Id == prosumerId)
-            .FirstOrDefaultAsync();
+        var slotStart = EnsureUtc(request.SlotStart);
+        var slotEnd = EnsureUtc(request.SlotEnd);
 
-        if (prosumer is null)
-        {
-            throw new KeyNotFoundException("Prosumer not found.");
-        }
+        if (slotStart <= DateTime.UtcNow)
+            throw new InvalidOperationException("Visit start must be in the future.");
+
+        if (slotStart > DateTime.UtcNow.AddDays(7))
+            throw new InvalidOperationException("Reservations can only be created within the next 7 days.");
+
+        var prosumer = await _db.Users.Find(u => u.Id == prosumerId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Prosumer not found.");
 
         if (prosumer.Role != UserRoles.Prosumer)
-        {
             throw new InvalidOperationException("Only prosumers can create reservations.");
-        }
 
         if (prosumer.Status != UserStatus.Active)
-        {
             throw new InvalidOperationException("Only active prosumers can create reservations.");
-        }
 
-        var slot = await _db.EnergyBookingSlots
-            .Find(candidate => candidate.Id == request.SlotId)
-            .FirstOrDefaultAsync();
+        var battery = await _db.EnergyBookingSlots.Find(s => s.Id == request.SlotId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Battery slot not found.");
 
-        if (slot is null)
-        {
-            throw new KeyNotFoundException("Booking slot not found.");
-        }
+        if (battery.Status != SlotStatus.Available)
+            throw new InvalidOperationException("Battery is closed and cannot be booked.");
 
-        if (slot.SlotStart <= DateTime.UtcNow)
-        {
-            throw new InvalidOperationException("Booking slot has already started.");
-        }
-
-        if (slot.SlotStart > DateTime.UtcNow.AddDays(7))
-        {
-            throw new InvalidOperationException("Reservations can only be created within the next 7 days.");
-        }
-
-        if (slot.SlotEnd <= slot.SlotStart)
-        {
-            throw new InvalidOperationException("Booking slot has an invalid time range.");
-        }
-
-        var station = await _db.SolarStations
-            .Find(candidate => candidate.Id == slot.StationId)
-            .FirstOrDefaultAsync();
-
-        if (station is null)
-        {
-            throw new KeyNotFoundException("Solar station not found.");
-        }
+        var station = await _db.SolarStations.Find(s => s.Id == battery.StationId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Solar station not found.");
 
         if (station.Status != StationStatus.Active)
-        {
             throw new InvalidOperationException("Solar station is inactive.");
-        }
 
-        var hasExistingReservation = await _db.EnergyReservations.Find(reservation =>
-            reservation.SlotId == slot.Id &&
-            reservation.ProsumerId == prosumerId &&
-            reservation.Status != ReservationStatus.Cancelled &&
-            reservation.Status != ReservationStatus.Rejected &&
-            reservation.Status != ReservationStatus.Expired).AnyAsync();
+        var hasOverlap = await _db.EnergyReservations.Find(r =>
+            r.SlotId == battery.Id &&
+            r.ProsumerId == prosumerId &&
+            r.Status != ReservationStatus.Cancelled &&
+            r.Status != ReservationStatus.Rejected &&
+            r.Status != ReservationStatus.Expired &&
+            r.Status != ReservationStatus.Completed &&
+            r.SlotStart < slotEnd &&
+            r.SlotEnd > slotStart).AnyAsync();
 
-        if (hasExistingReservation)
-        {
-            throw new InvalidOperationException("You already have a reservation for this slot.");
-        }
+        if (hasOverlap)
+            throw new InvalidOperationException("You already have a reservation overlapping this visit window.");
 
-        var claimedSlot = await _db.EnergyBookingSlots.FindOneAndUpdateAsync(
-            candidate => candidate.Id == slot.Id &&
-                         candidate.Status == SlotStatus.Available &&
-                         candidate.ReservedCount < candidate.MaxReservations,
-            Builders<EnergyBookingSlot>.Update
-                .Inc(candidate => candidate.ReservedCount, 1)
-                .Set(candidate => candidate.UpdatedAt, DateTime.UtcNow),
-            new FindOneAndUpdateOptions<EnergyBookingSlot>
-            {
-                ReturnDocument = ReturnDocument.After
-            });
-
-        if (claimedSlot is null)
-        {
-            throw new InvalidOperationException("Booking slot is no longer available.");
-        }
+        await ReserveEnergyAsync(battery.Id, request.ReservationType, request.EnergyKwh);
 
         var reservation = new EnergyReservation
         {
@@ -538,12 +450,12 @@ public class ReservationService
             ProsumerId = prosumer.Id,
             ProsumerNic = prosumer.Nic ?? string.Empty,
             StationId = station.Id,
-            SlotId = claimedSlot.Id,
+            SlotId = battery.Id,
             StationName = station.Name,
-            SlotStart = claimedSlot.SlotStart,
-            SlotEnd = claimedSlot.SlotEnd,
+            SlotStart = slotStart,
+            SlotEnd = slotEnd,
             ReservationType = request.ReservationType,
-            EnergyKwh = claimedSlot.EnergyKwh,
+            EnergyKwh = request.EnergyKwh,
             Status = ReservationStatus.Pending,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -552,97 +464,199 @@ public class ReservationService
         try
         {
             await _db.EnergyReservations.InsertOneAsync(reservation);
-            await UpdateSlotStatusAsync(claimedSlot);
             return reservation;
         }
         catch
         {
-            await _db.EnergyBookingSlots.UpdateOneAsync(
-                candidate => candidate.Id == claimedSlot.Id && candidate.ReservedCount > 0,
-                Builders<EnergyBookingSlot>.Update
-                    .Inc(candidate => candidate.ReservedCount, -1)
-                    .Set(candidate => candidate.Status, SlotStatus.Available)
-                    .Set(candidate => candidate.UpdatedAt, DateTime.UtcNow));
+            await ReleaseReservedEnergyAsync(reservation);
             throw;
         }
     }
 
-    private async Task UpdateSlotStatusAsync(EnergyBookingSlot slot)
+    /// <summary>Atomically reserves kWh on a battery for Charging or DropOff.</summary>
+    private async Task ReserveEnergyAsync(string slotId, string reservationType, double energyKwh)
     {
-        if (slot.ReservedCount >= slot.MaxReservations)
+        FilterDefinition<EnergyBookingSlot> filter;
+        UpdateDefinition<EnergyBookingSlot> update;
+
+        if (reservationType == ReservationTypes.Charging)
         {
-            await _db.EnergyBookingSlots.UpdateOneAsync(
-                candidate => candidate.Id == slot.Id,
-                Builders<EnergyBookingSlot>.Update
-                    .Set(candidate => candidate.Status, SlotStatus.FullyBooked)
-                    .Set(candidate => candidate.UpdatedAt, DateTime.UtcNow));
+            // Charging: request <= Capacity - ReservedCharging
+            filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
+                s.Id == slotId &&
+                s.Status == SlotStatus.Available &&
+                s.CapacityKwh - s.ReservedChargingKwh >= energyKwh);
+
+            update = Builders<EnergyBookingSlot>.Update
+                .Inc(s => s.ReservedChargingKwh, energyKwh)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+        }
+        else
+        {
+            // DropOff: request <= Capacity - Actual - ReservedDropOff (free space)
+            filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
+                s.Id == slotId &&
+                s.Status == SlotStatus.Available &&
+                s.CapacityKwh - s.ActualEnergyKwh - s.ReservedDropOffKwh >= energyKwh);
+
+            update = Builders<EnergyBookingSlot>.Update
+                .Inc(s => s.ReservedDropOffKwh, energyKwh)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+        }
+
+        var claimed = await _db.EnergyBookingSlots.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<EnergyBookingSlot> { ReturnDocument = ReturnDocument.After });
+
+        if (claimed is null)
+        {
+            var reason = reservationType == ReservationTypes.Charging
+                ? "Not enough charging capacity remaining on this battery."
+                : "Not enough free space remaining on this battery for drop-off.";
+            throw new InvalidOperationException(reason);
         }
     }
 
-    private async Task ReleaseSlotAsync(string slotId)
+    /// <summary>Releases reserved kWh without changing ActualEnergyKwh.</summary>
+    private async Task ReleaseReservedEnergyAsync(EnergyReservation reservation)
     {
-        await _db.EnergyBookingSlots.UpdateOneAsync(
-            candidate => candidate.Id == slotId && candidate.ReservedCount > 0,
-            Builders<EnergyBookingSlot>.Update
-                .Inc(candidate => candidate.ReservedCount, -1)
-                .Set(candidate => candidate.Status, SlotStatus.Available)
-                .Set(candidate => candidate.UpdatedAt, DateTime.UtcNow));
+        if (reservation.EnergyKwh <= 0)
+            return;
+
+        if (reservation.ReservationType == ReservationTypes.Charging)
+        {
+            await _db.EnergyBookingSlots.UpdateOneAsync(
+                s => s.Id == reservation.SlotId && s.ReservedChargingKwh >= reservation.EnergyKwh,
+                Builders<EnergyBookingSlot>.Update
+                    .Inc(s => s.ReservedChargingKwh, -reservation.EnergyKwh)
+                    .Set(s => s.UpdatedAt, DateTime.UtcNow));
+        }
+        else if (reservation.ReservationType == ReservationTypes.DropOff)
+        {
+            await _db.EnergyBookingSlots.UpdateOneAsync(
+                s => s.Id == reservation.SlotId && s.ReservedDropOffKwh >= reservation.EnergyKwh,
+                Builders<EnergyBookingSlot>.Update
+                    .Inc(s => s.ReservedDropOffKwh, -reservation.EnergyKwh)
+                    .Set(s => s.UpdatedAt, DateTime.UtcNow));
+        }
+    }
+
+    /// <summary>On QR complete: apply Actual ± kWh and clear the matching reserved pool.</summary>
+    private async Task ApplyCompletionInventoryAsync(EnergyReservation reservation)
+    {
+        FilterDefinition<EnergyBookingSlot> filter;
+        UpdateDefinition<EnergyBookingSlot> update;
+
+        if (reservation.ReservationType == ReservationTypes.Charging)
+        {
+            filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
+                s.Id == reservation.SlotId &&
+                s.ActualEnergyKwh >= reservation.EnergyKwh &&
+                s.ReservedChargingKwh >= reservation.EnergyKwh);
+
+            update = Builders<EnergyBookingSlot>.Update
+                .Inc(s => s.ActualEnergyKwh, -reservation.EnergyKwh)
+                .Inc(s => s.ReservedChargingKwh, -reservation.EnergyKwh)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+        }
+        else
+        {
+            filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
+                s.Id == reservation.SlotId &&
+                s.ActualEnergyKwh + reservation.EnergyKwh <= s.CapacityKwh &&
+                s.ReservedDropOffKwh >= reservation.EnergyKwh);
+
+            update = Builders<EnergyBookingSlot>.Update
+                .Inc(s => s.ActualEnergyKwh, reservation.EnergyKwh)
+                .Inc(s => s.ReservedDropOffKwh, -reservation.EnergyKwh)
+                .Set(s => s.UpdatedAt, DateTime.UtcNow);
+        }
+
+        var updated = await _db.EnergyBookingSlots.FindOneAndUpdateAsync(
+            filter,
+            update,
+            new FindOneAndUpdateOptions<EnergyBookingSlot> { ReturnDocument = ReturnDocument.After });
+
+        if (updated is null)
+        {
+            var reason = reservation.ReservationType == ReservationTypes.Charging
+                ? "Cannot complete charging: battery does not hold enough actual energy."
+                : "Cannot complete drop-off: battery does not have enough free capacity.";
+            throw new InvalidOperationException(reason);
+        }
     }
 
     private async Task ExpirePastReservationsAsync()
     {
         var now = DateTime.UtcNow;
-        await _db.EnergyReservations.UpdateManyAsync(
-            reservation => reservation.SlotEnd <= now &&
-                           (reservation.Status == ReservationStatus.Pending ||
-                            reservation.Status == ReservationStatus.Approved),
-            Builders<EnergyReservation>.Update
-                .Set(reservation => reservation.Status, ReservationStatus.Expired)
-                .Set(reservation => reservation.UpdatedAt, now));
+        var expired = await _db.EnergyReservations
+            .Find(r => r.SlotEnd <= now &&
+                       (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Approved))
+            .ToListAsync();
+
+        foreach (var reservation in expired)
+        {
+            var result = await _db.EnergyReservations.UpdateOneAsync(
+                r => r.Id == reservation.Id &&
+                     (r.Status == ReservationStatus.Pending || r.Status == ReservationStatus.Approved),
+                Builders<EnergyReservation>.Update
+                    .Set(r => r.Status, ReservationStatus.Expired)
+                    .Set(r => r.UpdatedAt, now));
+
+            if (result.ModifiedCount == 1)
+                await ReleaseReservedEnergyAsync(reservation);
+        }
     }
 
     private async Task<EnergyReservation> FindRequiredAsync(string reservationId)
     {
         if (!ObjectId.TryParse(reservationId, out _))
-        {
             throw new InvalidOperationException("Reservation id must be a valid id.");
-        }
 
-        var reservation = await _db.EnergyReservations
-            .Find(candidate => candidate.Id == reservationId)
-            .FirstOrDefaultAsync();
-
-        if (reservation is null)
-        {
-            throw new KeyNotFoundException("Reservation not found.");
-        }
-
-        return reservation;
+        return await _db.EnergyReservations.Find(c => c.Id == reservationId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Reservation not found.");
     }
 
     private async Task<EnergyReservation> FindOwnedAsync(string prosumerId, string reservationId)
     {
         if (!ObjectId.TryParse(reservationId, out _))
-        {
             throw new InvalidOperationException("Reservation id must be a valid id.");
-        }
 
-        var reservation = await _db.EnergyReservations
-            .Find(candidate => candidate.Id == reservationId && candidate.ProsumerId == prosumerId)
-            .FirstOrDefaultAsync();
-
-        if (reservation is null)
-        {
-            throw new KeyNotFoundException("Reservation not found.");
-        }
-
-        return reservation;
+        return await _db.EnergyReservations
+            .Find(c => c.Id == reservationId && c.ProsumerId == prosumerId)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Reservation not found.");
     }
 
-    private static string GenerateReservationCode()
+    private static void ValidateEnergyAndType(string reservationType, double energyKwh)
     {
-        return $"RSV-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(100000, 1000000)}";
+        if (reservationType is not (ReservationTypes.Charging or ReservationTypes.DropOff))
+            throw new InvalidOperationException("ReservationType must be Charging or DropOff.");
+
+        if (energyKwh <= 0)
+            throw new InvalidOperationException("EnergyKwh must be greater than zero.");
     }
+
+    private static void ValidateVisitWindow(DateTime start, DateTime end)
+    {
+        start = EnsureUtc(start);
+        end = EnsureUtc(end);
+        if (end <= start)
+            throw new InvalidOperationException("SlotEnd must be after SlotStart.");
+    }
+
+    private static double AvailableCharging(EnergyBookingSlot s) =>
+        Math.Max(s.CapacityKwh - s.ReservedChargingKwh, 0);
+
+    private static double AvailableDropOff(EnergyBookingSlot s) =>
+        Math.Max(s.CapacityKwh - s.ActualEnergyKwh - s.ReservedDropOffKwh, 0);
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static string GenerateReservationCode() =>
+        $"RSV-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(100000, 1000000)}";
 
     private static string GenerateQrPayload(EnergyReservation reservation)
     {

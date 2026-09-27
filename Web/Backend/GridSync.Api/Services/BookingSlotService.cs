@@ -1,6 +1,6 @@
 // -------------------------------------------------------------
 // File: BookingSlotService.cs
-// Description: Create, list, update, close, and delete energy booking slots.
+// Description: List, update notes, close, and delete station batteries.
 // -------------------------------------------------------------
 
 using GridSync.Api.Data;
@@ -20,42 +20,7 @@ public class BookingSlotService
         _db = db;
     }
 
-    /// <summary>Creates a bookable time window on an active station.</summary>
-    public async Task<BookingSlotResponse> CreateAsync(CreateBookingSlotRequest request, string createdByUserId)
-    {
-        ValidateWindow(request.SlotStart, request.SlotEnd, request.EnergyKwh, request.MaxReservations);
-
-        if (!ObjectId.TryParse(request.StationId, out _))
-            throw new InvalidOperationException("StationId must be a valid id.");
-
-        var station = await _db.SolarStations
-            .Find(s => s.Id == request.StationId)
-            .FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException($"Station '{request.StationId}' was not found.");
-
-        if (station.Status != StationStatus.Active)
-            throw new InvalidOperationException("Slots can only be created on active stations.");
-
-        var slot = new EnergyBookingSlot
-        {
-            StationId = request.StationId,
-            SlotStart = EnsureUtc(request.SlotStart),
-            SlotEnd = EnsureUtc(request.SlotEnd),
-            EnergyKwh = request.EnergyKwh,
-            MaxReservations = request.MaxReservations,
-            ReservedCount = 0,
-            Status = SlotStatus.Available,
-            Notes = request.Notes?.Trim(),
-            CreatedBy = createdByUserId,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        await _db.EnergyBookingSlots.InsertOneAsync(slot);
-        return ToResponse(slot, station.Name);
-    }
-
-    /// <summary>Lists slots, optionally filtered by station and status.</summary>
+    /// <summary>Lists batteries, optionally filtered by station and status.</summary>
     public async Task<List<BookingSlotResponse>> GetAllAsync(string? stationId, string? status)
     {
         var filter = Builders<EnergyBookingSlot>.Filter.Empty;
@@ -72,13 +37,14 @@ public class BookingSlotService
 
         var slots = await _db.EnergyBookingSlots
             .Find(filter)
-            .SortBy(s => s.SlotStart)
+            .SortBy(s => s.StationId)
+            .ThenBy(s => s.BatteryIndex)
             .ToListAsync();
 
         return await MapWithStationNamesAsync(slots);
     }
 
-    /// <summary>Returns one slot by id.</summary>
+    /// <summary>Returns one battery by id.</summary>
     public async Task<BookingSlotResponse> GetByIdAsync(string id)
     {
         var slot = await FindRequiredAsync(id);
@@ -86,41 +52,38 @@ public class BookingSlotService
         return ToResponse(slot, stationName);
     }
 
-    /// <summary>Updates slot timing and capacity when no reservations are held.</summary>
+    /// <summary>Updates battery notes only (capacity is owned by the station).</summary>
     public async Task<BookingSlotResponse> UpdateAsync(string id, UpdateBookingSlotRequest request)
     {
-        ValidateWindow(request.SlotStart, request.SlotEnd, request.EnergyKwh, request.MaxReservations);
-
         var slot = await FindRequiredAsync(id);
 
-        if (slot.ReservedCount > 0)
-            throw new InvalidOperationException("Cannot update a slot that already has reservations.");
-
         if (slot.Status == SlotStatus.Closed)
-            throw new InvalidOperationException("Closed slots cannot be updated. Create a new slot instead.");
+            throw new InvalidOperationException("Closed batteries cannot be updated.");
 
-        if (request.MaxReservations < slot.ReservedCount)
-            throw new InvalidOperationException("MaxReservations cannot be less than the current reserved count.");
-
-        slot.SlotStart = EnsureUtc(request.SlotStart);
-        slot.SlotEnd = EnsureUtc(request.SlotEnd);
-        slot.EnergyKwh = request.EnergyKwh;
-        slot.MaxReservations = request.MaxReservations;
         slot.Notes = request.Notes?.Trim();
-        slot.Status = SlotStatus.Available;
         slot.UpdatedAt = DateTime.UtcNow;
 
         await _db.EnergyBookingSlots.ReplaceOneAsync(s => s.Id == slot.Id, slot);
         return ToResponse(slot, await ResolveStationNameAsync(slot.StationId));
     }
 
-    /// <summary>Marks a slot as Closed so it can no longer be booked.</summary>
+    /// <summary>Marks a battery as Closed so it cannot be booked.</summary>
     public async Task<BookingSlotResponse> CloseAsync(string id)
     {
         var slot = await FindRequiredAsync(id);
 
         if (slot.Status == SlotStatus.Closed)
-            throw new InvalidOperationException("Slot is already closed.");
+            throw new InvalidOperationException("Battery is already closed.");
+
+        if (slot.ReservedChargingKwh > 0 || slot.ReservedDropOffKwh > 0)
+            throw new InvalidOperationException("Cannot close a battery with reserved energy.");
+
+        var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
+        var active = await _db.EnergyReservations.CountDocumentsAsync(
+            r => r.SlotId == id && activeStatuses.Contains(r.Status));
+
+        if (active > 0)
+            throw new InvalidOperationException("Cannot close a battery with active reservations.");
 
         slot.Status = SlotStatus.Closed;
         slot.UpdatedAt = DateTime.UtcNow;
@@ -128,20 +91,40 @@ public class BookingSlotService
         return ToResponse(slot, await ResolveStationNameAsync(slot.StationId));
     }
 
-    /// <summary>Deletes a slot that has no reservations.</summary>
+    /// <summary>Reopens a closed battery for booking.</summary>
+    public async Task<BookingSlotResponse> ReopenAsync(string id)
+    {
+        var slot = await FindRequiredAsync(id);
+
+        if (slot.Status == SlotStatus.Available)
+            throw new InvalidOperationException("Battery is already available.");
+
+        var station = await _db.SolarStations.Find(s => s.Id == slot.StationId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Station not found.");
+
+        if (station.Status != StationStatus.Active)
+            throw new InvalidOperationException("Cannot reopen a battery on an inactive station.");
+
+        slot.Status = SlotStatus.Available;
+        slot.UpdatedAt = DateTime.UtcNow;
+        await _db.EnergyBookingSlots.ReplaceOneAsync(s => s.Id == slot.Id, slot);
+        return ToResponse(slot, station.Name);
+    }
+
+    /// <summary>Deletes a battery with no reservations or reserved energy.</summary>
     public async Task DeleteAsync(string id)
     {
         var slot = await FindRequiredAsync(id);
 
-        if (slot.ReservedCount > 0)
-            throw new InvalidOperationException("Cannot delete a slot that has reservations.");
+        if (slot.ReservedChargingKwh > 0 || slot.ReservedDropOffKwh > 0)
+            throw new InvalidOperationException("Cannot delete a battery with reserved energy.");
 
         var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
         var linked = await _db.EnergyReservations.CountDocumentsAsync(
             r => r.SlotId == id && activeStatuses.Contains(r.Status));
 
         if (linked > 0)
-            throw new InvalidOperationException("Cannot delete a slot with active reservations.");
+            throw new InvalidOperationException("Cannot delete a battery with active reservations.");
 
         await _db.EnergyBookingSlots.DeleteOneAsync(s => s.Id == id);
     }
@@ -149,10 +132,10 @@ public class BookingSlotService
     private async Task<EnergyBookingSlot> FindRequiredAsync(string id)
     {
         if (!ObjectId.TryParse(id, out _))
-            throw new KeyNotFoundException($"Slot '{id}' was not found.");
+            throw new KeyNotFoundException($"Battery '{id}' was not found.");
 
         return await _db.EnergyBookingSlots.Find(s => s.Id == id).FirstOrDefaultAsync()
-            ?? throw new KeyNotFoundException($"Slot '{id}' was not found.");
+            ?? throw new KeyNotFoundException($"Battery '{id}' was not found.");
     }
 
     private async Task<string> ResolveStationNameAsync(string stationId)
@@ -177,38 +160,18 @@ public class BookingSlotService
             .ToList();
     }
 
-    private static void ValidateWindow(DateTime start, DateTime end, double energyKwh, int maxReservations)
-    {
-        start = EnsureUtc(start);
-        end = EnsureUtc(end);
-
-        if (end <= start)
-            throw new InvalidOperationException("SlotEnd must be after SlotStart.");
-
-        if (start <= DateTime.UtcNow)
-            throw new InvalidOperationException("SlotStart must be in the future.");
-
-        if (energyKwh <= 0)
-            throw new InvalidOperationException("EnergyKwh must be greater than zero.");
-
-        if (maxReservations < 1)
-            throw new InvalidOperationException("MaxReservations must be at least 1.");
-    }
-
-    private static DateTime EnsureUtc(DateTime value) =>
-        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
-
     private static BookingSlotResponse ToResponse(EnergyBookingSlot slot, string stationName) => new()
     {
         Id = slot.Id,
         StationId = slot.StationId,
         StationName = stationName,
-        SlotStart = slot.SlotStart,
-        SlotEnd = slot.SlotEnd,
-        EnergyKwh = slot.EnergyKwh,
-        MaxReservations = slot.MaxReservations,
-        ReservedCount = slot.ReservedCount,
-        AvailableReservations = Math.Max(slot.MaxReservations - slot.ReservedCount, 0),
+        BatteryIndex = slot.BatteryIndex,
+        CapacityKwh = slot.CapacityKwh,
+        ActualEnergyKwh = slot.ActualEnergyKwh,
+        ReservedChargingKwh = slot.ReservedChargingKwh,
+        ReservedDropOffKwh = slot.ReservedDropOffKwh,
+        AvailableChargingKwh = Math.Max(slot.CapacityKwh - slot.ReservedChargingKwh, 0),
+        AvailableDropOffKwh = Math.Max(slot.CapacityKwh - slot.ActualEnergyKwh - slot.ReservedDropOffKwh, 0),
         Status = slot.Status,
         Notes = slot.Notes,
         CreatedBy = slot.CreatedBy,

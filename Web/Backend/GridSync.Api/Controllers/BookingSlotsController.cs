@@ -1,9 +1,8 @@
 // -------------------------------------------------------------
 // File: BookingSlotsController.cs
-// Description: HTTP endpoints for energy booking slot management (UC07).
+// Description: HTTP endpoints for physical battery slot management (UC07).
 // -------------------------------------------------------------
 
-using System.Security.Claims;
 using GridSync.Api.Models;
 using GridSync.Api.Models.Dtos;
 using GridSync.Api.Services;
@@ -22,26 +21,6 @@ public class BookingSlotsController : ControllerBase
     public BookingSlotsController(BookingSlotService bookingSlotService)
     {
         _bookingSlotService = bookingSlotService;
-    }
-
-    /// <summary>POST /api/bookingslots — create a bookable slot.</summary>
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateBookingSlotRequest request)
-    {
-        var createdBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
-        try
-        {
-            var slot = await _bookingSlotService.CreateAsync(request, createdBy);
-            return CreatedAtAction(nameof(GetById), new { id = slot.Id }, slot);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
     }
 
     /// <summary>GET /api/bookingslots?stationId=&amp;status=</summary>
@@ -72,7 +51,7 @@ public class BookingSlotsController : ControllerBase
         }
     }
 
-    /// <summary>PUT /api/bookingslots/{id}</summary>
+    /// <summary>PUT /api/bookingslots/{id} — update battery notes.</summary>
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateBookingSlotRequest request)
     {
@@ -97,6 +76,24 @@ public class BookingSlotsController : ControllerBase
         try
         {
             return Ok(await _bookingSlotService.CloseAsync(id));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>POST /api/bookingslots/{id}/reopen — allow bookings again.</summary>
+    [HttpPost("{id}/reopen")]
+    public async Task<IActionResult> Reopen(string id)
+    {
+        try
+        {
+            return Ok(await _bookingSlotService.ReopenAsync(id));
         }
         catch (KeyNotFoundException ex)
         {
