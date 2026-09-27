@@ -32,6 +32,9 @@ export default function Layout() {
                 <NavLink className={navClass} to='/backoffice'>
                   Users
                 </NavLink>
+                <NavLink className={navClass} to="/stations">
+                  Stations
+                </NavLink>
                 <NavLink className={navClass} to='/backoffice/staff/new'>
                   Create staff
                 </NavLink>
@@ -51,14 +54,17 @@ export default function Layout() {
               </>
             )}
             {user.role === 'Prosumer' && (
-              <NavLink className={navClass} to='/reservations'>
-                Reservations
-              </NavLink>
-            )}
-            {user.role === 'Prosumer' && (
-              <NavLink className={navClass} to='/prosumer'>
-                Home
-              </NavLink>
+              <>
+                <NavLink className={navClass} to='/prosumer'>
+                  Home
+                </NavLink>
+                <NavLink className={navClass} to='/reservations'>
+                  Reservations
+                </NavLink>
+                <NavLink className={navClass} to="/stations">
+                  Stations
+                </NavLink>
+              </>
             )}
             <NavLink className={navClass} to='/profile'>
               Profile
