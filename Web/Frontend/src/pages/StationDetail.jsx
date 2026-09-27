@@ -574,8 +574,9 @@ export default function StationDetail() {
             </h2>
             <p className="mt-1 text-sm text-slate-600">
               Physical batteries auto-created with this station. Charging
-              reserves capacity; Drop-off reserves free space. Actual energy
-              changes only after QR completion.
+              Charging deposits into free space; Drop-off withdraws stored
+              energy. Drop-off availability only rises after a charging transfer
+              is completed via QR.
             </p>
           </div>
           <button

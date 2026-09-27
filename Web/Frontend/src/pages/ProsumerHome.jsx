@@ -192,7 +192,7 @@ export default function ProsumerHome() {
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <FeaturePreview
             title="1. Reserve kWh"
-            detail="Charging books against capacity − reserved. Drop-off books against free space."
+            detail="Charging books free space (capacity − actual − reserved). Drop-off books stored energy and only appears after charging is completed via QR."
           />
           <FeaturePreview
             title="2. Get QR"

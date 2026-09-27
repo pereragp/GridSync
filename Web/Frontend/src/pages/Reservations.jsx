@@ -248,8 +248,9 @@ export default function Reservations() {
       <section className={`${cardClass} mb-6`}>
         <h2 className="mb-1 text-lg font-medium">Create reservation</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Select a battery, choose Charging (take power) or Drop-off (store
-          power), enter kWh, and set your visit window within the next 7 days.
+          Select a battery, choose Charging (deposit energy into the battery) or
+          Drop-off (withdraw stored energy), enter kWh, and set your visit window
+          within the next 7 days.
         </p>
         <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-2">
           <Field label="Battery">
@@ -283,8 +284,8 @@ export default function Reservations() {
                 setForm({ ...form, reservationType: e.target.value })
               }
             >
-              <option value="Charging">Charging (take power out)</option>
-              <option value="DropOff">Drop-off (put power in)</option>
+              <option value="Charging">Charging (deposit into battery)</option>
+              <option value="DropOff">Drop-off (withdraw stored energy)</option>
             </select>
           </Field>
           <Field
