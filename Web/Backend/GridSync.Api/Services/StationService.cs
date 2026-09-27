@@ -26,10 +26,10 @@ public class StationService
     // CREATE new solar hub
     public async Task<StationResponse> CreateAsync(CreateStationRequest request, string createdByUserId)
     {
-        // Validate that capacity values are positive numbers
-        if (request.CapacityKw <= 0 || request.CapacityKwh <= 0)
-            throw new InvalidOperationException("Capacity values must be greater than zero.");
-        
+        // Validate that per-battery capacity is positive and slots are non-negative
+        if (request.BatteryCapacityKwh <= 0)
+            throw new InvalidOperationException("Battery capacity (kWh) must be greater than zero.");
+
         if (request.Latitude < -90 || request.Latitude > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
 
@@ -52,9 +52,9 @@ public class StationService
                 Type = "Point",
                 Coordinates = new[] { request.Longitude, request.Latitude }
             },
-            CapacityKw = request.CapacityKw,
-            CapacityKwh = request.CapacityKwh,
+            BatteryCapacityKwh = request.BatteryCapacityKwh,
             AvailableBatterySlots = request.AvailableBatterySlots,
+            TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, request.BatteryCapacityKwh),
             Schedule = new StationSchedule{
                 // Use provided values or fall back to sensible defaults
                 OpenTime = request.OpenTime ?? "08:00",
@@ -98,8 +98,8 @@ public class StationService
         var station = await FindRequiredAsync(id);
 
         // Validations
-        if (request.CapacityKw <= 0 || request.CapacityKwh <= 0)
-            throw new InvalidOperationException("Capacity values must be greater than zero.");
+        if (request.BatteryCapacityKwh <= 0)
+            throw new InvalidOperationException("Battery capacity (kWh) must be greater than zero.");
 
         if (request.Latitude < -90 || request.Latitude > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
@@ -118,9 +118,9 @@ public class StationService
             Type = "Point",
             Coordinates = new[] { request.Longitude, request.Latitude }
         };
-        station.CapacityKw = request.CapacityKw;
-        station.CapacityKwh = request.CapacityKwh;
+        station.BatteryCapacityKwh = request.BatteryCapacityKwh;
         station.AvailableBatterySlots = request.AvailableBatterySlots;
+        station.TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, request.BatteryCapacityKwh);
         station.UpdatedAt = DateTime.UtcNow;
 
         // ReplaceOneAsync replaces the whole document in MongoDB
@@ -155,11 +155,12 @@ public class StationService
         if (request.AvailableBatterySlots < 0)
             throw new InvalidOperationException("Battery slots cannot be negative.");
 
-        // Apply only schedule-related changes
+        // Apply only schedule-related changes; recalculate total when slots change
         station.Schedule.OpenTime = request.OpenTime;
         station.Schedule.CloseTime = request.CloseTime;
         station.Schedule.WorkingDays = request.WorkingDays;
         station.AvailableBatterySlots = request.AvailableBatterySlots;
+        station.TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, station.BatteryCapacityKwh);
         station.UpdatedAt = DateTime.UtcNow;
         
         await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
@@ -223,6 +224,25 @@ public class StationService
         return ToResponse(station);
     }
 
+    //------------------------------------------
+    // REACTIVATE an inactive node
+    public async Task<StationResponse> ReactivateAsync(string id)
+    {
+        var station = await FindRequiredAsync(id);
+
+        if (station.Status == StationStatus.Active)
+            throw new InvalidOperationException("Station is already active.");
+
+        if (station.Status != StationStatus.Inactive)
+            throw new InvalidOperationException("Only inactive stations can be reactivated.");
+
+        station.Status = StationStatus.Active;
+        station.UpdatedAt = DateTime.UtcNow;
+        await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        return ToResponse(station);
+    }
+
     //---------------
     // Helpers
     //---------------
@@ -270,6 +290,10 @@ public class StationService
 
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
 
+    /// <summary>Total capacity = battery slots × kWh per battery.</summary>
+    private static double ComputeTotalCapacityKwh(int availableBatterySlots, double batteryCapacityKwh) =>
+        availableBatterySlots * batteryCapacityKwh;
+
     private static StationResponse ToResponse(SolarStation s) => new()
     {
         Id = s.Id,
@@ -279,9 +303,9 @@ public class StationService
         // GeoJSON: index 0 = longitude, index 1 = latitude
         Longitude = s.Location.Coordinates[0],
         Latitude = s.Location.Coordinates[1],
-        CapacityKw = s.CapacityKw,
-        CapacityKwh = s.CapacityKwh,
+        BatteryCapacityKwh = s.BatteryCapacityKwh,
         AvailableBatterySlots = s.AvailableBatterySlots,
+        TotalCapacityKwh = ComputeTotalCapacityKwh(s.AvailableBatterySlots, s.BatteryCapacityKwh),
         Schedule = s.Schedule,
         Status = s.Status,
         CreatedBy = s.CreatedBy,
@@ -300,9 +324,9 @@ public class StationService
             Description = baseResponse.Description,
             Longitude = baseResponse.Longitude,
             Latitude = baseResponse.Latitude,
-            CapacityKw = baseResponse.CapacityKw,
-            CapacityKwh = baseResponse.CapacityKwh,
+            BatteryCapacityKwh = baseResponse.BatteryCapacityKwh,
             AvailableBatterySlots = baseResponse.AvailableBatterySlots,
+            TotalCapacityKwh = baseResponse.TotalCapacityKwh,
             Schedule = baseResponse.Schedule,
             Status = baseResponse.Status,
             CreatedBy = baseResponse.CreatedBy,

@@ -3,6 +3,11 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace GridSync.Api.Models;
 
+/// <summary>
+/// Ignores leftover fields from older schemas (e.g. capacityKw / capacityKwh)
+/// so existing Mongo documents still deserialize.
+/// </summary>
+[BsonIgnoreExtraElements]
 public class SolarStation
 {
     [BsonId]
@@ -22,14 +27,16 @@ public class SolarStation
     [BsonElement("location")]
     public GeoLocation Location { get; set; } = new();
 
-    [BsonElement("capacityKw")]
-    public double CapacityKw { get; set; }
-
-    [BsonElement("capacityKwh")]
-    public double CapacityKwh { get; set; }
+    /// <summary>Energy capacity of a single battery at this station (kWh).</summary>
+    [BsonElement("batteryCapacityKwh")]
+    public double BatteryCapacityKwh { get; set; }
 
     [BsonElement("availableBatterySlots")]
     public int AvailableBatterySlots { get; set; }
+
+    /// <summary>Total station storage = availableBatterySlots × batteryCapacityKwh.</summary>
+    [BsonElement("totalCapacityKwh")]
+    public double TotalCapacityKwh { get; set; }
 
     [BsonElement("schedule")]
     public StationSchedule Schedule { get; set; } = new();

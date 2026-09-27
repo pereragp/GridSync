@@ -3,11 +3,14 @@ import { Link, useParams } from "react-router-dom";
 import {
   deactivateStation,
   getStation,
+  reactivateStation,
   updateStation,
   updateStationSchedule,
 } from "../api/stations";
+import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1800&q=80";
@@ -17,17 +20,17 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export default function StationDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { notify, confirm } = useFeedback();
   const isBackoffice = user.role === "Backoffice";
   const canEditSchedule =
     user.role === "Backoffice" || user.role === "GridOperator";
 
   const [station, setStation] = useState(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
-  const [deactivating, setDeactivating] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const [details, setDetails] = useState(null);
   const [schedule, setSchedule] = useState(null);
@@ -43,8 +46,7 @@ export default function StationDetail() {
         description: data.description || "",
         latitude: String(data.latitude ?? ""),
         longitude: String(data.longitude ?? ""),
-        capacityKw: String(data.capacityKw ?? ""),
-        capacityKwh: String(data.capacityKwh ?? ""),
+        batteryCapacityKwh: String(data.batteryCapacityKwh ?? ""),
         availableBatterySlots: String(data.availableBatterySlots ?? 0),
       });
       setSchedule({
@@ -87,7 +89,6 @@ export default function StationDetail() {
 
   async function onSaveDetails(e) {
     e.preventDefault();
-    setMessage("");
     setError("");
     setSavingDetails(true);
     try {
@@ -96,8 +97,7 @@ export default function StationDetail() {
         description: details.description.trim() || null,
         latitude: Number(details.latitude),
         longitude: Number(details.longitude),
-        capacityKw: Number(details.capacityKw),
-        capacityKwh: Number(details.capacityKwh),
+        batteryCapacityKwh: Number(details.batteryCapacityKwh),
         availableBatterySlots: Number(details.availableBatterySlots),
       });
       setStation(updated);
@@ -105,9 +105,9 @@ export default function StationDetail() {
         ...prev,
         availableBatterySlots: String(updated.availableBatterySlots ?? 0),
       }));
-      setMessage("Station details updated.");
+      notify.success("Station details updated.");
     } catch (err) {
-      setError(err.message || "Update failed");
+      notify.error(err.message || "Update failed");
     } finally {
       setSavingDetails(false);
     }
@@ -115,11 +115,10 @@ export default function StationDetail() {
 
   async function onSaveSchedule(e) {
     e.preventDefault();
-    setMessage("");
     setError("");
 
     if (schedule.workingDays.length === 0) {
-      setError("Select at least one working day.");
+      notify.warning("Select at least one working day.");
       return;
     }
 
@@ -140,33 +139,56 @@ export default function StationDetail() {
             }
           : prev
       );
-      setMessage("Schedule and battery slots updated.");
+      notify.success("Schedule and battery slots updated.");
     } catch (err) {
-      setError(err.message || "Schedule update failed");
+      notify.error(err.message || "Schedule update failed");
     } finally {
       setSavingSchedule(false);
     }
   }
 
   async function onDeactivate() {
-    if (
-      !window.confirm(
-        `Deactivate ${station?.name}? Blocked if active reservations exist.`
-      )
-    ) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Deactivate ${station?.name}?`,
+      message:
+        "Deactivation is blocked if active energy reservations exist on this node. Resolve those first if needed.",
+      confirmLabel: "Deactivate",
+      tone: "danger",
+    });
+    if (!ok) return;
+
     setError("");
-    setDeactivating(true);
+    setStatusBusy(true);
     try {
       const updated = await deactivateStation(id);
       setStation(updated);
-      setMessage(`Deactivated ${updated.name}`);
+      notify.success(`Deactivated ${updated.name}`);
     } catch (err) {
-      setError(err.message || "Deactivate failed");
+      notify.error(err.message || "Deactivate failed");
     } finally {
-      setDeactivating(false);
+      setStatusBusy(false);
+    }
+  }
+
+  async function onReactivate() {
+    const ok = await confirm({
+      title: `Reactivate ${station?.name}?`,
+      message:
+        "This node will become Active again and available for schedules and bookings.",
+      confirmLabel: "Reactivate",
+    });
+    if (!ok) return;
+
+    setError("");
+    setStatusBusy(true);
+    try {
+      const updated = await reactivateStation(id);
+      setStation(updated);
+      notify.success(`Reactivated ${updated.name}`);
+    } catch (err) {
+      notify.error(err.message || "Reactivate failed");
+    } finally {
+      setStatusBusy(false);
     }
   }
 
@@ -177,9 +199,9 @@ export default function StationDetail() {
   if (!station || !details || !schedule) {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Station unavailable">
           {error || "Station not found."}
-        </div>
+        </AlertMessage>
         <Link to="/stations" className="text-sm font-semibold text-grid-700 hover:underline">
           Back to stations
         </Link>
@@ -208,8 +230,8 @@ export default function StationDetail() {
               {station.name}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              {station.capacityKw} kW / {station.capacityKwh} kWh ·{" "}
-              {station.availableBatterySlots} slots
+              {station.totalCapacityKwh} kWh total · {station.batteryCapacityKwh}{" "}
+              kWh/battery · {station.availableBatterySlots} slots
             </p>
             <div className="mt-3">
               <StatusBadge status={station.status} light />
@@ -225,11 +247,21 @@ export default function StationDetail() {
             {isBackoffice && station.status === "Active" ? (
               <button
                 type="button"
-                disabled={deactivating}
+                disabled={statusBusy}
                 onClick={onDeactivate}
                 className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50 disabled:opacity-60"
               >
-                {deactivating ? "Deactivating…" : "Deactivate"}
+                {statusBusy ? "Working…" : "Deactivate"}
+              </button>
+            ) : null}
+            {isBackoffice && station.status === "Inactive" ? (
+              <button
+                type="button"
+                disabled={statusBusy}
+                onClick={onReactivate}
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "Reactivate"}
               </button>
             ) : null}
           </div>
@@ -237,14 +269,9 @@ export default function StationDetail() {
       </section>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Something went wrong" onDismiss={() => setError("")}>
           {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div className="rounded-xl border border-grid-200 bg-grid-50 px-4 py-3 text-sm text-grid-800">
-          {message}
-        </div>
+        </AlertMessage>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-12">
@@ -303,35 +330,21 @@ export default function StationDetail() {
                   </div>
                   <label className="block text-sm">
                     <span className="mb-1.5 block font-medium text-slate-700">
-                      Solar Generation Capacity (kW)
+                      Battery capacity (kWh per battery)
                     </span>
                     <input
                       className={inputClass}
                       type="number"
                       min="0"
                       step="any"
-                      value={details.capacityKw}
-                      onChange={(e) => setDetail("capacityKw", e.target.value)}
+                      value={details.batteryCapacityKwh}
+                      onChange={(e) => setDetail("batteryCapacityKwh", e.target.value)}
                       required
                     />
                   </label>
                   <label className="block text-sm">
                     <span className="mb-1.5 block font-medium text-slate-700">
-                      Battery Storage Capacity (kWh)
-                    </span>
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={details.capacityKwh}
-                      onChange={(e) => setDetail("capacityKwh", e.target.value)}
-                      required
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    <span className="mb-1.5 block font-medium text-slate-700">
-                      Battery slots
+                      Battery slots available
                     </span>
                     <input
                       className={inputClass}
@@ -344,6 +357,25 @@ export default function StationDetail() {
                       }
                       required
                     />
+                  </label>
+                  <label className="block text-sm sm:col-span-2">
+                    <span className="mb-1.5 block font-medium text-slate-700">
+                      Total capacity (kWh)
+                    </span>
+                    <input
+                      className={`${inputClass} bg-slate-50 text-slate-600`}
+                      type="text"
+                      readOnly
+                      value={
+                        details.batteryCapacityKwh !== "" &&
+                        details.availableBatterySlots !== ""
+                          ? `${Number(details.availableBatterySlots) * Number(details.batteryCapacityKwh)} kWh`
+                          : "—"
+                      }
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Calculated as battery slots × kWh per battery
+                    </span>
                   </label>
                 </div>
                 <button
@@ -359,14 +391,14 @@ export default function StationDetail() {
                 <dl className="grid gap-4 sm:grid-cols-2 text-sm">
                   <Info label="Description" value={station.description || "—"} wide />
                   <Info
-                    label="Solar Generation Capacity (kW)"
-                    value={station.capacityKw}
-                  />
-                  <Info
-                    label="Battery Storage Capacity (kWh)"
-                    value={station.capacityKwh}
+                    label="Battery capacity (kWh per battery)"
+                    value={station.batteryCapacityKwh}
                   />
                   <Info label="Battery slots" value={station.availableBatterySlots} />
+                  <Info
+                    label="Total capacity (kWh)"
+                    value={station.totalCapacityKwh}
+                  />
                 </dl>
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-slate-700">Location</p>

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createStation } from "../api/stations";
+import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1800&q=80";
@@ -13,8 +15,7 @@ const emptyForm = {
   description: "",
   latitude: "",
   longitude: "",
-  capacityKw: "",
-  capacityKwh: "",
+  batteryCapacityKwh: "",
   availableBatterySlots: "0",
   openTime: "08:00",
   closeTime: "18:00",
@@ -23,6 +24,7 @@ const emptyForm = {
 
 export default function CreateStation() {
   const navigate = useNavigate();
+  const { notify } = useFeedback();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -64,16 +66,18 @@ export default function CreateStation() {
         description: form.description.trim() || null,
         latitude: Number(form.latitude),
         longitude: Number(form.longitude),
-        capacityKw: Number(form.capacityKw),
-        capacityKwh: Number(form.capacityKwh),
+        batteryCapacityKwh: Number(form.batteryCapacityKwh),
         availableBatterySlots: Number(form.availableBatterySlots),
         openTime: form.openTime,
         closeTime: form.closeTime,
         workingDays: form.workingDays,
       });
+      notify.success(`${station.name} created successfully.`);
       navigate(`/stations/${station.id}`, { replace: true });
     } catch (err) {
-      setError(err.message || "Create failed");
+      const msg = err.message || "Create failed";
+      setError(msg);
+      notify.error(msg);
     } finally {
       setLoading(false);
     }
@@ -124,8 +128,10 @@ export default function CreateStation() {
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {error}
+          <div className="mb-4">
+            <AlertMessage type="error" title="Could not create station" onDismiss={() => setError("")}>
+              {error}
+            </AlertMessage>
           </div>
         ) : null}
 
@@ -174,37 +180,22 @@ export default function CreateStation() {
 
                 <label className="block text-sm">
                   <span className="mb-1.5 block font-medium text-slate-700">
-                    Solar Generation Capacity (kW)
+                    Battery capacity (kWh per battery)
                   </span>
                   <input
                     className={inputClass}
                     type="number"
                     min="0"
                     step="any"
-                    value={form.capacityKw}
-                    onChange={(e) => set("capacityKw", e.target.value)}
+                    value={form.batteryCapacityKwh}
+                    onChange={(e) => set("batteryCapacityKwh", e.target.value)}
                     required
                   />
                 </label>
 
                 <label className="block text-sm">
                   <span className="mb-1.5 block font-medium text-slate-700">
-                    Battery Storage Capacity (kWh)
-                  </span>
-                  <input
-                    className={inputClass}
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={form.capacityKwh}
-                    onChange={(e) => set("capacityKwh", e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="block text-sm">
-                  <span className="mb-1.5 block font-medium text-slate-700">
-                    Battery slots
+                    Battery slots available
                   </span>
                   <input
                     className={inputClass}
@@ -215,6 +206,25 @@ export default function CreateStation() {
                     onChange={(e) => set("availableBatterySlots", e.target.value)}
                     required
                   />
+                </label>
+
+                <label className="block text-sm sm:col-span-2">
+                  <span className="mb-1.5 block font-medium text-slate-700">
+                    Total capacity (kWh)
+                  </span>
+                  <input
+                    className={`${inputClass} bg-slate-50 text-slate-600`}
+                    type="text"
+                    readOnly
+                    value={
+                      form.batteryCapacityKwh !== "" && form.availableBatterySlots !== ""
+                        ? `${Number(form.availableBatterySlots) * Number(form.batteryCapacityKwh)} kWh`
+                        : "—"
+                    }
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Calculated as battery slots × kWh per battery
+                  </span>
                 </label>
 
                 <label className="block text-sm">

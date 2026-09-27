@@ -1,3 +1,5 @@
+import AlertMessage from "./AlertMessage";
+
 export function PageHeader({ title, subtitle }) {
   return (
     <div className="mb-6">
@@ -7,13 +9,17 @@ export function PageHeader({ title, subtitle }) {
   );
 }
 
-export function Alert({ type = "error", children }) {
-  const styles =
-    type === "success"
-      ? "border-teal-200 bg-teal-50 text-teal-900"
-      : "border-red-200 bg-red-50 text-red-800";
+/** Prefer AlertMessage for new code; kept for existing pages. */
+export function Alert({ type = "error", children, title, onDismiss, className }) {
   return (
-    <div className={`mb-4 rounded-md border px-3 py-2 text-sm ${styles}`}>{children}</div>
+    <AlertMessage
+      type={type}
+      title={title}
+      onDismiss={onDismiss}
+      className={className || "mb-4"}
+    >
+      {children}
+    </AlertMessage>
   );
 }
 

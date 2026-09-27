@@ -34,3 +34,9 @@ export function deactivateStation(id) {
     method: "POST",
   });
 }
+
+export function reactivateStation(id) {
+  return apiRequest(`/api/stations/${id}/reactivate`, {
+    method: "POST",
+  });
+}

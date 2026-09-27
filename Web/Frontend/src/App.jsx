@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { FeedbackProvider } from "./context/FeedbackContext";
 import { ProtectedRoute, PublicOnlyRoute } from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import BackofficeHome from "./pages/BackofficeHome";
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <FeedbackProvider>
         <Routes>
           <Route element={<PublicOnlyRoute />}>
             <Route path='/login' element={<Login />} />
@@ -78,6 +80,7 @@ export default function App() {
           </Route>
           <Route path='*' element={<Navigate to='/login' replace />} />
         </Routes>
+        </FeedbackProvider>
       </AuthProvider>
     </BrowserRouter>
   );

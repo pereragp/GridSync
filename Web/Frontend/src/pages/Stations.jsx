@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { deactivateStation, getStations } from "../api/stations";
+import AlertMessage from "../components/AlertMessage";
+import { deactivateStation, getStations, reactivateStation } from "../api/stations";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1800&q=80";
 
 export default function Stations() {
   const { user } = useAuth();
+  const { notify, confirm } = useFeedback();
   const isBackoffice = user.role === "Backoffice";
 
   const [stations, setStations] = useState([]);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [query, setQuery] = useState("");
@@ -59,22 +61,45 @@ export default function Stations() {
   }, [stations, query, statusFilter]);
 
   async function onDeactivate(station) {
-    if (
-      !window.confirm(
-        `Deactivate ${station.name}? This is blocked if active reservations exist.`
-      )
-    ) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Deactivate ${station.name}?`,
+      message:
+        "Deactivation is blocked if active energy reservations exist on this node. Resolve those first if needed.",
+      confirmLabel: "Deactivate",
+      tone: "danger",
+    });
+    if (!ok) return;
+
     setError("");
     setBusyId(station.id);
     try {
       await deactivateStation(station.id);
-      setMessage(`Deactivated ${station.name}`);
+      notify.success(`Deactivated ${station.name}`);
       await load();
     } catch (err) {
-      setError(err.message || "Deactivate failed");
+      notify.error(err.message || "Deactivate failed");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function onReactivate(station) {
+    const ok = await confirm({
+      title: `Reactivate ${station.name}?`,
+      message:
+        "This node will become Active again and available for schedules and bookings.",
+      confirmLabel: "Reactivate",
+    });
+    if (!ok) return;
+
+    setError("");
+    setBusyId(station.id);
+    try {
+      await reactivateStation(station.id);
+      notify.success(`Reactivated ${station.name}`);
+      await load();
+    } catch (err) {
+      notify.error(err.message || "Reactivate failed");
     } finally {
       setBusyId("");
     }
@@ -126,14 +151,9 @@ export default function Stations() {
       </section>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Could not load stations" onDismiss={() => setError("")}>
           {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div className="rounded-xl border border-grid-200 bg-grid-50 px-4 py-3 text-sm text-grid-800">
-          {message}
-        </div>
+        </AlertMessage>
       ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -193,7 +213,7 @@ export default function Stations() {
                 <thead>
                   <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                     <th className="pb-3 pr-4 font-semibold">Station</th>
-                    <th className="pb-3 pr-4 font-semibold">Generation / Storage</th>
+                    <th className="pb-3 pr-4 font-semibold">Capacity</th>
                     <th className="pb-3 pr-4 font-semibold">Slots</th>
                     <th className="pb-3 pr-4 font-semibold">Schedule</th>
                     <th className="pb-3 pr-4 font-semibold">Status</th>
@@ -213,9 +233,9 @@ export default function Stations() {
                         ) : null}
                       </td>
                       <td className="py-3.5 pr-4 text-slate-700">
-                        <p>{s.capacityKw} kW generation</p>
+                        <p>{s.totalCapacityKwh} kWh total</p>
                         <p className="text-xs text-slate-500">
-                          {s.capacityKwh} kWh storage
+                          {s.batteryCapacityKwh} kWh per battery
                         </p>
                       </td>
                       <td className="py-3.5 pr-4 text-slate-700">
@@ -248,6 +268,16 @@ export default function Stations() {
                               onClick={() => onDeactivate(s)}
                             >
                               {busyId === s.id ? "Working…" : "Deactivate"}
+                            </button>
+                          ) : null}
+                          {isBackoffice && s.status === "Inactive" ? (
+                            <button
+                              type="button"
+                              disabled={busyId === s.id}
+                              className="rounded-lg border border-grid-300 bg-grid-50 px-3 py-1.5 text-sm font-medium text-grid-800 transition hover:bg-grid-100 disabled:opacity-60"
+                              onClick={() => onReactivate(s)}
+                            >
+                              {busyId === s.id ? "Working…" : "Reactivate"}
                             </button>
                           ) : null}
                         </div>

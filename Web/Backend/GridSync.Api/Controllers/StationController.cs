@@ -143,4 +143,24 @@ public class StationsController : ControllerBase
             return Conflict(new { message = ex.Message });
         }
     }
+
+    /// <summary>POST /api/stations/{id}/reactivate — restores an inactive node to Active.</summary>
+    [HttpPost("{id}/reactivate")]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    public async Task<IActionResult> Reactivate(string id)
+    {
+        try
+        {
+            var station = await _stationService.ReactivateAsync(id);
+            return Ok(station);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

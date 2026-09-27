@@ -19,9 +19,13 @@ public class StationResponse
     public double Latitude { get; set; }
     public double Longitude { get; set; }
 
-    public double CapacityKw { get; set; }
-    public double CapacityKwh { get; set; }
+    /// <summary>Energy capacity of one battery (kWh).</summary>
+    public double BatteryCapacityKwh { get; set; }
+
     public int AvailableBatterySlots { get; set; }
+
+    /// <summary>Total station storage = slots × batteryCapacityKwh.</summary>
+    public double TotalCapacityKwh { get; set; }
 
     // The full schedule object — reuse the existing model class directly
     public StationSchedule Schedule { get; set; } = new();
