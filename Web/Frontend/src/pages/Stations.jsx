@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { deactivateStation, getStations } from "../api/stations";
+import { deactivateStation, getStations, reactivateStation } from "../api/stations";
 import { useAuth } from "../context/AuthContext";
 
 const HERO_IMAGE =
@@ -75,6 +75,24 @@ export default function Stations() {
       await load();
     } catch (err) {
       setError(err.message || "Deactivate failed");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function onReactivate(station) {
+    if (!window.confirm(`Reactivate ${station.name}?`)) {
+      return;
+    }
+    setMessage("");
+    setError("");
+    setBusyId(station.id);
+    try {
+      await reactivateStation(station.id);
+      setMessage(`Reactivated ${station.name}`);
+      await load();
+    } catch (err) {
+      setError(err.message || "Reactivate failed");
     } finally {
       setBusyId("");
     }
@@ -193,7 +211,7 @@ export default function Stations() {
                 <thead>
                   <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
                     <th className="pb-3 pr-4 font-semibold">Station</th>
-                    <th className="pb-3 pr-4 font-semibold">Generation / Storage</th>
+                    <th className="pb-3 pr-4 font-semibold">Capacity</th>
                     <th className="pb-3 pr-4 font-semibold">Slots</th>
                     <th className="pb-3 pr-4 font-semibold">Schedule</th>
                     <th className="pb-3 pr-4 font-semibold">Status</th>
@@ -213,9 +231,9 @@ export default function Stations() {
                         ) : null}
                       </td>
                       <td className="py-3.5 pr-4 text-slate-700">
-                        <p>{s.capacityKw} kW generation</p>
+                        <p>{s.totalCapacityKwh} kWh total</p>
                         <p className="text-xs text-slate-500">
-                          {s.capacityKwh} kWh storage
+                          {s.batteryCapacityKwh} kWh per battery
                         </p>
                       </td>
                       <td className="py-3.5 pr-4 text-slate-700">
@@ -248,6 +266,16 @@ export default function Stations() {
                               onClick={() => onDeactivate(s)}
                             >
                               {busyId === s.id ? "Working…" : "Deactivate"}
+                            </button>
+                          ) : null}
+                          {isBackoffice && s.status === "Inactive" ? (
+                            <button
+                              type="button"
+                              disabled={busyId === s.id}
+                              className="rounded-lg border border-grid-300 bg-grid-50 px-3 py-1.5 text-sm font-medium text-grid-800 transition hover:bg-grid-100 disabled:opacity-60"
+                              onClick={() => onReactivate(s)}
+                            >
+                              {busyId === s.id ? "Working…" : "Reactivate"}
                             </button>
                           ) : null}
                         </div>

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import {
   deactivateStation,
   getStation,
+  reactivateStation,
   updateStation,
   updateStationSchedule,
 } from "../api/stations";
@@ -27,7 +28,7 @@ export default function StationDetail() {
   const [loading, setLoading] = useState(true);
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
-  const [deactivating, setDeactivating] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   const [details, setDetails] = useState(null);
   const [schedule, setSchedule] = useState(null);
@@ -43,8 +44,7 @@ export default function StationDetail() {
         description: data.description || "",
         latitude: String(data.latitude ?? ""),
         longitude: String(data.longitude ?? ""),
-        capacityKw: String(data.capacityKw ?? ""),
-        capacityKwh: String(data.capacityKwh ?? ""),
+        batteryCapacityKwh: String(data.batteryCapacityKwh ?? ""),
         availableBatterySlots: String(data.availableBatterySlots ?? 0),
       });
       setSchedule({
@@ -96,8 +96,7 @@ export default function StationDetail() {
         description: details.description.trim() || null,
         latitude: Number(details.latitude),
         longitude: Number(details.longitude),
-        capacityKw: Number(details.capacityKw),
-        capacityKwh: Number(details.capacityKwh),
+        batteryCapacityKwh: Number(details.batteryCapacityKwh),
         availableBatterySlots: Number(details.availableBatterySlots),
       });
       setStation(updated);
@@ -158,7 +157,7 @@ export default function StationDetail() {
     }
     setMessage("");
     setError("");
-    setDeactivating(true);
+    setStatusBusy(true);
     try {
       const updated = await deactivateStation(id);
       setStation(updated);
@@ -166,7 +165,25 @@ export default function StationDetail() {
     } catch (err) {
       setError(err.message || "Deactivate failed");
     } finally {
-      setDeactivating(false);
+      setStatusBusy(false);
+    }
+  }
+
+  async function onReactivate() {
+    if (!window.confirm(`Reactivate ${station?.name}?`)) {
+      return;
+    }
+    setMessage("");
+    setError("");
+    setStatusBusy(true);
+    try {
+      const updated = await reactivateStation(id);
+      setStation(updated);
+      setMessage(`Reactivated ${updated.name}`);
+    } catch (err) {
+      setError(err.message || "Reactivate failed");
+    } finally {
+      setStatusBusy(false);
     }
   }
 
@@ -208,8 +225,8 @@ export default function StationDetail() {
               {station.name}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              {station.capacityKw} kW / {station.capacityKwh} kWh ·{" "}
-              {station.availableBatterySlots} slots
+              {station.totalCapacityKwh} kWh total · {station.batteryCapacityKwh}{" "}
+              kWh/battery · {station.availableBatterySlots} slots
             </p>
             <div className="mt-3">
               <StatusBadge status={station.status} light />
@@ -225,11 +242,21 @@ export default function StationDetail() {
             {isBackoffice && station.status === "Active" ? (
               <button
                 type="button"
-                disabled={deactivating}
+                disabled={statusBusy}
                 onClick={onDeactivate}
                 className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50 disabled:opacity-60"
               >
-                {deactivating ? "Deactivating…" : "Deactivate"}
+                {statusBusy ? "Working…" : "Deactivate"}
+              </button>
+            ) : null}
+            {isBackoffice && station.status === "Inactive" ? (
+              <button
+                type="button"
+                disabled={statusBusy}
+                onClick={onReactivate}
+                className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50 disabled:opacity-60"
+              >
+                {statusBusy ? "Working…" : "Reactivate"}
               </button>
             ) : null}
           </div>
@@ -303,35 +330,21 @@ export default function StationDetail() {
                   </div>
                   <label className="block text-sm">
                     <span className="mb-1.5 block font-medium text-slate-700">
-                      Solar Generation Capacity (kW)
+                      Battery capacity (kWh per battery)
                     </span>
                     <input
                       className={inputClass}
                       type="number"
                       min="0"
                       step="any"
-                      value={details.capacityKw}
-                      onChange={(e) => setDetail("capacityKw", e.target.value)}
+                      value={details.batteryCapacityKwh}
+                      onChange={(e) => setDetail("batteryCapacityKwh", e.target.value)}
                       required
                     />
                   </label>
                   <label className="block text-sm">
                     <span className="mb-1.5 block font-medium text-slate-700">
-                      Battery Storage Capacity (kWh)
-                    </span>
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={details.capacityKwh}
-                      onChange={(e) => setDetail("capacityKwh", e.target.value)}
-                      required
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    <span className="mb-1.5 block font-medium text-slate-700">
-                      Battery slots
+                      Battery slots available
                     </span>
                     <input
                       className={inputClass}
@@ -344,6 +357,25 @@ export default function StationDetail() {
                       }
                       required
                     />
+                  </label>
+                  <label className="block text-sm sm:col-span-2">
+                    <span className="mb-1.5 block font-medium text-slate-700">
+                      Total capacity (kWh)
+                    </span>
+                    <input
+                      className={`${inputClass} bg-slate-50 text-slate-600`}
+                      type="text"
+                      readOnly
+                      value={
+                        details.batteryCapacityKwh !== "" &&
+                        details.availableBatterySlots !== ""
+                          ? `${Number(details.availableBatterySlots) * Number(details.batteryCapacityKwh)} kWh`
+                          : "—"
+                      }
+                    />
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Calculated as battery slots × kWh per battery
+                    </span>
                   </label>
                 </div>
                 <button
@@ -359,14 +391,14 @@ export default function StationDetail() {
                 <dl className="grid gap-4 sm:grid-cols-2 text-sm">
                   <Info label="Description" value={station.description || "—"} wide />
                   <Info
-                    label="Solar Generation Capacity (kW)"
-                    value={station.capacityKw}
-                  />
-                  <Info
-                    label="Battery Storage Capacity (kWh)"
-                    value={station.capacityKwh}
+                    label="Battery capacity (kWh per battery)"
+                    value={station.batteryCapacityKwh}
                   />
                   <Info label="Battery slots" value={station.availableBatterySlots} />
+                  <Info
+                    label="Total capacity (kWh)"
+                    value={station.totalCapacityKwh}
+                  />
                 </dl>
                 <div>
                   <p className="mb-1.5 text-sm font-medium text-slate-700">Location</p>

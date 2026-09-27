@@ -13,8 +13,7 @@ const emptyForm = {
   description: "",
   latitude: "",
   longitude: "",
-  capacityKw: "",
-  capacityKwh: "",
+  batteryCapacityKwh: "",
   availableBatterySlots: "0",
   openTime: "08:00",
   closeTime: "18:00",
@@ -64,8 +63,7 @@ export default function CreateStation() {
         description: form.description.trim() || null,
         latitude: Number(form.latitude),
         longitude: Number(form.longitude),
-        capacityKw: Number(form.capacityKw),
-        capacityKwh: Number(form.capacityKwh),
+        batteryCapacityKwh: Number(form.batteryCapacityKwh),
         availableBatterySlots: Number(form.availableBatterySlots),
         openTime: form.openTime,
         closeTime: form.closeTime,
@@ -174,37 +172,22 @@ export default function CreateStation() {
 
                 <label className="block text-sm">
                   <span className="mb-1.5 block font-medium text-slate-700">
-                    Solar Generation Capacity (kW)
+                    Battery capacity (kWh per battery)
                   </span>
                   <input
                     className={inputClass}
                     type="number"
                     min="0"
                     step="any"
-                    value={form.capacityKw}
-                    onChange={(e) => set("capacityKw", e.target.value)}
+                    value={form.batteryCapacityKwh}
+                    onChange={(e) => set("batteryCapacityKwh", e.target.value)}
                     required
                   />
                 </label>
 
                 <label className="block text-sm">
                   <span className="mb-1.5 block font-medium text-slate-700">
-                    Battery Storage Capacity (kWh)
-                  </span>
-                  <input
-                    className={inputClass}
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={form.capacityKwh}
-                    onChange={(e) => set("capacityKwh", e.target.value)}
-                    required
-                  />
-                </label>
-
-                <label className="block text-sm">
-                  <span className="mb-1.5 block font-medium text-slate-700">
-                    Battery slots
+                    Battery slots available
                   </span>
                   <input
                     className={inputClass}
@@ -215,6 +198,25 @@ export default function CreateStation() {
                     onChange={(e) => set("availableBatterySlots", e.target.value)}
                     required
                   />
+                </label>
+
+                <label className="block text-sm sm:col-span-2">
+                  <span className="mb-1.5 block font-medium text-slate-700">
+                    Total capacity (kWh)
+                  </span>
+                  <input
+                    className={`${inputClass} bg-slate-50 text-slate-600`}
+                    type="text"
+                    readOnly
+                    value={
+                      form.batteryCapacityKwh !== "" && form.availableBatterySlots !== ""
+                        ? `${Number(form.availableBatterySlots) * Number(form.batteryCapacityKwh)} kWh`
+                        : "—"
+                    }
+                  />
+                  <span className="mt-1 block text-xs text-slate-500">
+                    Calculated as battery slots × kWh per battery
+                  </span>
                 </label>
 
                 <label className="block text-sm">
