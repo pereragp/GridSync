@@ -69,3 +69,46 @@ body {
 .gs-animate-pan {
   animation: gs-pan 28s ease-in-out infinite alternate;
 }
+
+@keyframes gs-alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gs-dialog-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gs-dialog-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.gs-alert {
+  animation: gs-alert-in 0.28s ease-out both;
+}
+
+.gs-dialog-backdrop {
+  animation: gs-dialog-backdrop-in 0.2s ease-out both;
+}
+
+.gs-dialog-panel {
+  animation: gs-dialog-panel-in 0.28s ease-out both;
+}

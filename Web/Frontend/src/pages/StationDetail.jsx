@@ -7,8 +7,10 @@ import {
   updateStation,
   updateStationSchedule,
 } from "../api/stations";
+import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1800&q=80";
@@ -18,13 +20,13 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export default function StationDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { notify, confirm } = useFeedback();
   const isBackoffice = user.role === "Backoffice";
   const canEditSchedule =
     user.role === "Backoffice" || user.role === "GridOperator";
 
   const [station, setStation] = useState(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -87,7 +89,6 @@ export default function StationDetail() {
 
   async function onSaveDetails(e) {
     e.preventDefault();
-    setMessage("");
     setError("");
     setSavingDetails(true);
     try {
@@ -104,9 +105,9 @@ export default function StationDetail() {
         ...prev,
         availableBatterySlots: String(updated.availableBatterySlots ?? 0),
       }));
-      setMessage("Station details updated.");
+      notify.success("Station details updated.");
     } catch (err) {
-      setError(err.message || "Update failed");
+      notify.error(err.message || "Update failed");
     } finally {
       setSavingDetails(false);
     }
@@ -114,11 +115,10 @@ export default function StationDetail() {
 
   async function onSaveSchedule(e) {
     e.preventDefault();
-    setMessage("");
     setError("");
 
     if (schedule.workingDays.length === 0) {
-      setError("Select at least one working day.");
+      notify.warning("Select at least one working day.");
       return;
     }
 
@@ -139,49 +139,54 @@ export default function StationDetail() {
             }
           : prev
       );
-      setMessage("Schedule and battery slots updated.");
+      notify.success("Schedule and battery slots updated.");
     } catch (err) {
-      setError(err.message || "Schedule update failed");
+      notify.error(err.message || "Schedule update failed");
     } finally {
       setSavingSchedule(false);
     }
   }
 
   async function onDeactivate() {
-    if (
-      !window.confirm(
-        `Deactivate ${station?.name}? Blocked if active reservations exist.`
-      )
-    ) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Deactivate ${station?.name}?`,
+      message:
+        "Deactivation is blocked if active energy reservations exist on this node. Resolve those first if needed.",
+      confirmLabel: "Deactivate",
+      tone: "danger",
+    });
+    if (!ok) return;
+
     setError("");
     setStatusBusy(true);
     try {
       const updated = await deactivateStation(id);
       setStation(updated);
-      setMessage(`Deactivated ${updated.name}`);
+      notify.success(`Deactivated ${updated.name}`);
     } catch (err) {
-      setError(err.message || "Deactivate failed");
+      notify.error(err.message || "Deactivate failed");
     } finally {
       setStatusBusy(false);
     }
   }
 
   async function onReactivate() {
-    if (!window.confirm(`Reactivate ${station?.name}?`)) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Reactivate ${station?.name}?`,
+      message:
+        "This node will become Active again and available for schedules and bookings.",
+      confirmLabel: "Reactivate",
+    });
+    if (!ok) return;
+
     setError("");
     setStatusBusy(true);
     try {
       const updated = await reactivateStation(id);
       setStation(updated);
-      setMessage(`Reactivated ${updated.name}`);
+      notify.success(`Reactivated ${updated.name}`);
     } catch (err) {
-      setError(err.message || "Reactivate failed");
+      notify.error(err.message || "Reactivate failed");
     } finally {
       setStatusBusy(false);
     }
@@ -194,9 +199,9 @@ export default function StationDetail() {
   if (!station || !details || !schedule) {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Station unavailable">
           {error || "Station not found."}
-        </div>
+        </AlertMessage>
         <Link to="/stations" className="text-sm font-semibold text-grid-700 hover:underline">
           Back to stations
         </Link>
@@ -264,14 +269,9 @@ export default function StationDetail() {
       </section>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Something went wrong" onDismiss={() => setError("")}>
           {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div className="rounded-xl border border-grid-200 bg-grid-50 px-4 py-3 text-sm text-grid-800">
-          {message}
-        </div>
+        </AlertMessage>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-12">

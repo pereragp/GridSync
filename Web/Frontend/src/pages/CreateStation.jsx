@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createStation } from "../api/stations";
+import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1800&q=80";
@@ -22,6 +24,7 @@ const emptyForm = {
 
 export default function CreateStation() {
   const navigate = useNavigate();
+  const { notify } = useFeedback();
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,9 +72,12 @@ export default function CreateStation() {
         closeTime: form.closeTime,
         workingDays: form.workingDays,
       });
+      notify.success(`${station.name} created successfully.`);
       navigate(`/stations/${station.id}`, { replace: true });
     } catch (err) {
-      setError(err.message || "Create failed");
+      const msg = err.message || "Create failed";
+      setError(msg);
+      notify.error(msg);
     } finally {
       setLoading(false);
     }
@@ -122,8 +128,10 @@ export default function CreateStation() {
         </div>
 
         {error ? (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {error}
+          <div className="mb-4">
+            <AlertMessage type="error" title="Could not create station" onDismiss={() => setError("")}>
+              {error}
+            </AlertMessage>
           </div>
         ) : null}
 

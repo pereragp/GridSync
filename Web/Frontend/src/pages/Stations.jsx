@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import AlertMessage from "../components/AlertMessage";
 import { deactivateStation, getStations, reactivateStation } from "../api/stations";
 import { useAuth } from "../context/AuthContext";
+import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1800&q=80";
 
 export default function Stations() {
   const { user } = useAuth();
+  const { notify, confirm } = useFeedback();
   const isBackoffice = user.role === "Backoffice";
 
   const [stations, setStations] = useState([]);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [query, setQuery] = useState("");
@@ -59,40 +61,45 @@ export default function Stations() {
   }, [stations, query, statusFilter]);
 
   async function onDeactivate(station) {
-    if (
-      !window.confirm(
-        `Deactivate ${station.name}? This is blocked if active reservations exist.`
-      )
-    ) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Deactivate ${station.name}?`,
+      message:
+        "Deactivation is blocked if active energy reservations exist on this node. Resolve those first if needed.",
+      confirmLabel: "Deactivate",
+      tone: "danger",
+    });
+    if (!ok) return;
+
     setError("");
     setBusyId(station.id);
     try {
       await deactivateStation(station.id);
-      setMessage(`Deactivated ${station.name}`);
+      notify.success(`Deactivated ${station.name}`);
       await load();
     } catch (err) {
-      setError(err.message || "Deactivate failed");
+      notify.error(err.message || "Deactivate failed");
     } finally {
       setBusyId("");
     }
   }
 
   async function onReactivate(station) {
-    if (!window.confirm(`Reactivate ${station.name}?`)) {
-      return;
-    }
-    setMessage("");
+    const ok = await confirm({
+      title: `Reactivate ${station.name}?`,
+      message:
+        "This node will become Active again and available for schedules and bookings.",
+      confirmLabel: "Reactivate",
+    });
+    if (!ok) return;
+
     setError("");
     setBusyId(station.id);
     try {
       await reactivateStation(station.id);
-      setMessage(`Reactivated ${station.name}`);
+      notify.success(`Reactivated ${station.name}`);
       await load();
     } catch (err) {
-      setError(err.message || "Reactivate failed");
+      notify.error(err.message || "Reactivate failed");
     } finally {
       setBusyId("");
     }
@@ -144,14 +151,9 @@ export default function Stations() {
       </section>
 
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <AlertMessage type="error" title="Could not load stations" onDismiss={() => setError("")}>
           {error}
-        </div>
-      ) : null}
-      {message ? (
-        <div className="rounded-xl border border-grid-200 bg-grid-50 px-4 py-3 text-sm text-grid-800">
-          {message}
-        </div>
+        </AlertMessage>
       ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
