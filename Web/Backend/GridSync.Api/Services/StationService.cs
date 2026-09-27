@@ -70,7 +70,9 @@ public class StationService
         // Save to MongoDB
         await _db.SolarStations.InsertOneAsync(station);
 
-        // Map to response DTO and return
+        // One EnergyBookingSlot document per physical battery
+        await CreateBatteriesAsync(station, createdByUserId);
+
         return ToResponse(station);
     }
 
@@ -110,6 +112,9 @@ public class StationService
         if (request.AvailableBatterySlots < 0)
             throw new InvalidOperationException("Battery slots cannot be negative.");
 
+        var previousBatteryCount = station.AvailableBatterySlots;
+        var previousCapacity = station.BatteryCapacityKwh;
+
         // Apply changes to the loaded station
         station.Name = request.Name.Trim();
         station.Description = request.Description?.Trim();
@@ -123,8 +128,9 @@ public class StationService
         station.TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, request.BatteryCapacityKwh);
         station.UpdatedAt = DateTime.UtcNow;
 
-        // ReplaceOneAsync replaces the whole document in MongoDB
         await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        await SyncBatteriesAsync(station, previousBatteryCount, previousCapacity, station.CreatedBy);
 
         return ToResponse(station);
     }
@@ -155,6 +161,8 @@ public class StationService
         if (request.AvailableBatterySlots < 0)
             throw new InvalidOperationException("Battery slots cannot be negative.");
 
+        var previousBatteryCount = station.AvailableBatterySlots;
+
         // Apply only schedule-related changes; recalculate total when slots change
         station.Schedule.OpenTime = request.OpenTime;
         station.Schedule.CloseTime = request.CloseTime;
@@ -164,6 +172,9 @@ public class StationService
         station.UpdatedAt = DateTime.UtcNow;
         
         await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        await SyncBatteriesAsync(station, previousBatteryCount, station.BatteryCapacityKwh, station.CreatedBy);
+
         return ToResponse(station);
     }
 
@@ -246,6 +257,127 @@ public class StationService
     //---------------
     // Helpers
     //---------------
+
+    /// <summary>Creates N battery documents for a newly created station.</summary>
+    private async Task CreateBatteriesAsync(SolarStation station, string? createdByUserId)
+    {
+        if (station.AvailableBatterySlots <= 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var batteries = Enumerable.Range(1, station.AvailableBatterySlots)
+            .Select(index => new EnergyBookingSlot
+            {
+                StationId = station.Id,
+                BatteryIndex = index,
+                CapacityKwh = station.BatteryCapacityKwh,
+                ActualEnergyKwh = 0,
+                ReservedChargingKwh = 0,
+                ReservedDropOffKwh = 0,
+                Status = SlotStatus.Available,
+                CreatedBy = createdByUserId,
+                CreatedAt = now,
+                UpdatedAt = now
+            })
+            .ToList();
+
+        await _db.EnergyBookingSlots.InsertManyAsync(batteries);
+    }
+
+    /// <summary>
+    /// Syncs battery documents when station battery count or capacity changes.
+    /// </summary>
+    private async Task SyncBatteriesAsync(
+        SolarStation station,
+        int _previousBatteryCount,
+        double previousCapacityKwh,
+        string? createdByUserId)
+    {
+        var batteries = await _db.EnergyBookingSlots
+            .Find(b => b.StationId == station.Id)
+            .SortBy(b => b.BatteryIndex)
+            .ToListAsync();
+
+        var newCount = station.AvailableBatterySlots;
+        var currentCount = batteries.Count;
+
+        if (newCount > currentCount)
+        {
+            var startIndex = currentCount == 0
+                ? 1
+                : batteries.Max(b => b.BatteryIndex) + 1;
+            var toAdd = newCount - currentCount;
+            var now = DateTime.UtcNow;
+            var extras = Enumerable.Range(0, toAdd)
+                .Select(offset => new EnergyBookingSlot
+                {
+                    StationId = station.Id,
+                    BatteryIndex = startIndex + offset,
+                    CapacityKwh = station.BatteryCapacityKwh,
+                    ActualEnergyKwh = 0,
+                    ReservedChargingKwh = 0,
+                    ReservedDropOffKwh = 0,
+                    Status = SlotStatus.Available,
+                    CreatedBy = createdByUserId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                })
+                .ToList();
+            await _db.EnergyBookingSlots.InsertManyAsync(extras);
+            batteries.AddRange(extras);
+        }
+        else if (newCount < currentCount)
+        {
+            var removeCount = currentCount - newCount;
+            var candidates = batteries
+                .OrderByDescending(b => b.BatteryIndex)
+                .Take(removeCount)
+                .ToList();
+
+            foreach (var battery in candidates)
+            {
+                if (battery.ReservedChargingKwh > 0 || battery.ReservedDropOffKwh > 0)
+                    throw new InvalidOperationException(
+                        $"Cannot reduce battery count: battery {battery.BatteryIndex} still has reserved energy.");
+
+                var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
+                var active = await _db.EnergyReservations.CountDocumentsAsync(
+                    r => r.SlotId == battery.Id && activeStatuses.Contains(r.Status));
+
+                if (active > 0)
+                    throw new InvalidOperationException(
+                        $"Cannot reduce battery count: battery {battery.BatteryIndex} has active reservations.");
+            }
+
+            var ids = candidates.Select(b => b.Id).ToList();
+            await _db.EnergyBookingSlots.DeleteManyAsync(b => ids.Contains(b.Id));
+            batteries = batteries.Where(b => !ids.Contains(b.Id)).ToList();
+        }
+
+        if (Math.Abs(station.BatteryCapacityKwh - previousCapacityKwh) > 0.0001)
+        {
+            var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
+            foreach (var battery in batteries)
+            {
+                var active = await _db.EnergyReservations.CountDocumentsAsync(
+                    r => r.SlotId == battery.Id && activeStatuses.Contains(r.Status));
+
+                if (active > 0)
+                    throw new InvalidOperationException(
+                        "Cannot change battery capacity while batteries have active reservations.");
+
+                if (battery.ActualEnergyKwh > station.BatteryCapacityKwh)
+                    throw new InvalidOperationException(
+                        $"Cannot set capacity below actual energy on battery {battery.BatteryIndex}.");
+            }
+
+            await _db.EnergyBookingSlots.UpdateManyAsync(
+                b => b.StationId == station.Id,
+                Builders<EnergyBookingSlot>.Update
+                    .Set(b => b.CapacityKwh, station.BatteryCapacityKwh)
+                    .Set(b => b.UpdatedAt, DateTime.UtcNow));
+        }
+    }
 
     /// <summary>
     /// Loads a station from the database or throws if it doesn't exist.

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
+  closeBookingSlot,
+  getBookingSlots,
+  reopenBookingSlot,
+} from "../api/bookingSlots";
+import {
   deactivateStation,
   getStation,
   reactivateStation,
@@ -26,6 +31,8 @@ export default function StationDetail() {
     user.role === "Backoffice" || user.role === "GridOperator";
 
   const [station, setStation] = useState(null);
+  const [batteries, setBatteries] = useState([]);
+  const [batteryBusyId, setBatteryBusyId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [savingDetails, setSavingDetails] = useState(false);
@@ -34,6 +41,14 @@ export default function StationDetail() {
 
   const [details, setDetails] = useState(null);
   const [schedule, setSchedule] = useState(null);
+
+  const loadBatteries = useCallback(async () => {
+    try {
+      setBatteries((await getBookingSlots(id)) || []);
+    } catch {
+      setBatteries([]);
+    }
+  }, [id]);
 
   const load = useCallback(async () => {
     setError("");
@@ -55,13 +70,14 @@ export default function StationDetail() {
         workingDays: [...(data.schedule?.workingDays || [])],
         availableBatterySlots: String(data.availableBatterySlots ?? 0),
       });
+      await loadBatteries();
     } catch (err) {
       setError(err.message || "Failed to load station");
       setStation(null);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, loadBatteries]);
 
   useEffect(() => {
     load();
@@ -106,6 +122,7 @@ export default function StationDetail() {
         availableBatterySlots: String(updated.availableBatterySlots ?? 0),
       }));
       notify.success("Station details updated.");
+      await loadBatteries();
     } catch (err) {
       notify.error(err.message || "Update failed");
     } finally {
@@ -140,10 +157,29 @@ export default function StationDetail() {
           : prev
       );
       notify.success("Schedule and battery slots updated.");
+      await loadBatteries();
     } catch (err) {
       notify.error(err.message || "Schedule update failed");
     } finally {
       setSavingSchedule(false);
+    }
+  }
+
+  async function onToggleBattery(battery) {
+    setBatteryBusyId(battery.id);
+    try {
+      if (battery.status === "Closed") {
+        await reopenBookingSlot(battery.id);
+        notify.success(`Battery #${battery.batteryIndex} reopened.`);
+      } else {
+        await closeBookingSlot(battery.id);
+        notify.success(`Battery #${battery.batteryIndex} closed.`);
+      }
+      await loadBatteries();
+    } catch (err) {
+      notify.error(err.message || "Battery update failed");
+    } finally {
+      setBatteryBusyId("");
     }
   }
 
@@ -529,6 +565,101 @@ export default function StationDetail() {
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-grid-900">
+              Batteries
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Physical batteries auto-created with this station. Charging
+              reserves capacity; Drop-off reserves free space. Actual energy
+              changes only after QR completion.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadBatteries}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {batteries.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No battery records yet. Creating or updating the station battery
+            count will create them.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="pb-2 pr-3 font-semibold">#</th>
+                  <th className="pb-2 pr-3 font-semibold">Capacity</th>
+                  <th className="pb-2 pr-3 font-semibold">Actual</th>
+                  <th className="pb-2 pr-3 font-semibold">Charge avail</th>
+                  <th className="pb-2 pr-3 font-semibold">Drop-off avail</th>
+                  <th className="pb-2 pr-3 font-semibold">Status</th>
+                  {canEditSchedule ? (
+                    <th className="pb-2 font-semibold">Action</th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {batteries.map((battery) => (
+                  <tr key={battery.id}>
+                    <td className="py-3 pr-3 font-medium text-slate-900">
+                      {battery.batteryIndex}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {Number(battery.capacityKwh).toFixed(2)} kWh
+                    </td>
+                    <td className="py-3 pr-3">
+                      {Number(battery.actualEnergyKwh).toFixed(2)} kWh
+                    </td>
+                    <td className="py-3 pr-3">
+                      {Number(battery.availableChargingKwh).toFixed(2)} kWh
+                    </td>
+                    <td className="py-3 pr-3">
+                      {Number(battery.availableDropOffKwh).toFixed(2)} kWh
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          battery.status === "Available"
+                            ? "bg-grid-100 text-grid-800"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {battery.status}
+                      </span>
+                    </td>
+                    {canEditSchedule ? (
+                      <td className="py-3">
+                        <button
+                          type="button"
+                          disabled={batteryBusyId === battery.id}
+                          onClick={() => onToggleBattery(battery)}
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          {batteryBusyId === battery.id
+                            ? "…"
+                            : battery.status === "Closed"
+                              ? "Reopen"
+                              : "Close"}
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -12,6 +12,18 @@ export default function Stations() {
   const { user } = useAuth();
   const { notify, confirm } = useFeedback();
   const isBackoffice = user.role === "Backoffice";
+  const isOperator = user.role === "GridOperator";
+  const consoleLabel = isBackoffice
+    ? "Backoffice console"
+    : isOperator
+      ? "Operator console"
+      : "Prosumer portal";
+  const consoleBlurb = isBackoffice
+    ? "Register microgrid hubs, update capacity, and deactivate nodes across the GridSync network."
+    : isOperator
+      ? "Monitor station batteries, capacity, and operating schedules."
+      : "Browse hubs and battery availability before booking Charging or Drop-off energy.";
+
 
   const [stations, setStations] = useState([]);
   const [error, setError] = useState("");
@@ -120,15 +132,13 @@ export default function Stations() {
         <div className="relative z-10 flex flex-col gap-6 px-6 py-10 sm:px-10 sm:py-12 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
-              {isBackoffice ? "Backoffice console" : "Operator console"}
+              {consoleLabel}
             </p>
             <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
               Solar stations
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              {isBackoffice
-                ? "Register microgrid hubs, update capacity, and deactivate nodes across the GridSync network."
-                : "Monitor station capacity and update operating schedules and battery slots."}
+              {consoleBlurb}
             </p>
           </div>
 

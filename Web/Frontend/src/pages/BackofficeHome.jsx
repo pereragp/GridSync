@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  approveReservation,
+  getManagedReservations,
+  rejectReservation,
+} from "../api/reservations";
+import {
   approveUser,
   deactivateUser,
   getPendingUsers,
@@ -16,6 +21,7 @@ export default function BackofficeHome() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [pending, setPending] = useState([]);
+  const [pendingReservations, setPendingReservations] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -28,9 +34,14 @@ export default function BackofficeHome() {
     setError("");
     setLoading(true);
     try {
-      const [all, pend] = await Promise.all([getUsers(), getPendingUsers()]);
+      const [all, pend, bookings] = await Promise.all([
+        getUsers(),
+        getPendingUsers(),
+        getManagedReservations("Pending").catch(() => []),
+      ]);
       setUsers(all || []);
       setPending(pend || []);
+      setPendingReservations(bookings || []);
     } catch (err) {
       setError(err.message || "Failed to load users");
     } finally {
@@ -49,11 +60,12 @@ export default function BackofficeHome() {
     return {
       total: users.length,
       pending: pending.length,
+      pendingBookings: pendingReservations.length,
       active,
       deactivated,
       prosumers,
     };
-  }, [users, pending]);
+  }, [users, pending, pendingReservations]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,6 +96,16 @@ export default function BackofficeHome() {
     }
   }
 
+  function onRejectBooking(reservation) {
+    const reason = window.prompt("Rejection reason:", "");
+    if (reason === null || !reason.trim()) return;
+    runAction(
+      reservation.id,
+      () => rejectReservation(reservation.id, reason.trim()),
+      `Rejected ${reservation.reservationCode || reservation.id}`,
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Hero */}
@@ -103,15 +125,21 @@ export default function BackofficeHome() {
               Backoffice console
             </p>
             <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              User administration
+              User & booking administration
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              Approve pending prosumers, manage staff accounts, and control
-              activation status across the GridSync network.
+              Approve pending prosumers, review energy reservations, manage
+              staff, and control activation across the GridSync network.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Link
+              to="/backoffice/reservations"
+              className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+            >
+              Approve reservations
+            </Link>
             <Link
               to="/stations"
               className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
@@ -129,9 +157,14 @@ export default function BackofficeHome() {
       </section>
 
       {/* Stats */}
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total users" value={stats.total} />
-        <StatCard label="Pending approvals" value={stats.pending} accent />
+        <StatCard label="Pending users" value={stats.pending} accent />
+        <StatCard
+          label="Pending bookings"
+          value={stats.pendingBookings}
+          accent
+        />
         <StatCard label="Active accounts" value={stats.active} />
         <StatCard label="Prosumers" value={stats.prosumers} />
       </section>
@@ -146,6 +179,93 @@ export default function BackofficeHome() {
           {message}
         </div>
       ) : null}
+
+      {/* Pending energy reservations */}
+      <section className="overflow-hidden rounded-2xl border border-teal-200/80 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 bg-teal-50/80 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-teal-950">
+              Pending energy reservations
+            </h2>
+            <p className="text-sm text-teal-900/70">
+              Prosumer Charging / Drop-off bookings waiting for approval. QR is
+              issued on approve.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-teal-200/80 px-3 py-1 text-xs font-semibold text-teal-950">
+              {pendingReservations.length} waiting
+            </span>
+            <Link
+              to="/backoffice/reservations"
+              className="text-sm font-semibold text-teal-800 hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+        </div>
+
+        <div className="p-5">
+          {loading ? (
+            <p className="text-sm text-slate-500">Loading bookings…</p>
+          ) : pendingReservations.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+              No pending energy reservations right now.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingReservations.slice(0, 5).map((reservation) => (
+                <article
+                  key={reservation.id}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      {reservation.reservationCode || reservation.id}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {reservation.stationName || "Station"} · NIC{" "}
+                      {reservation.prosumerNic || "—"} ·{" "}
+                      {reservation.reservationType === "DropOff"
+                        ? "Drop-off"
+                        : reservation.reservationType}{" "}
+                      · {reservation.energyKwh} kWh
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatBookingDate(reservation.slotStart)} –{" "}
+                      {formatBookingDate(reservation.slotEnd)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === reservation.id}
+                      className="rounded-lg bg-grid-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-grid-800 disabled:opacity-60"
+                      onClick={() =>
+                        runAction(
+                          reservation.id,
+                          () => approveReservation(reservation.id),
+                          `Approved ${reservation.reservationCode || reservation.id}`,
+                        )
+                      }
+                    >
+                      {busyId === reservation.id ? "…" : "Approve"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === reservation.id}
+                      className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                      onClick={() => onRejectBooking(reservation)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Pending */}
       <section className="overflow-hidden rounded-2xl border border-amber-200/80 bg-white shadow-sm">
@@ -415,4 +535,12 @@ function initials(name = "") {
       .map((part) => part[0]?.toUpperCase() || "")
       .join("") || "U"
   );
+}
+
+function formatBookingDate(value) {
+  if (!value) return "Unknown";
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
