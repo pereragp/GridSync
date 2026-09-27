@@ -22,10 +22,6 @@ public class SolarStation
     [BsonElement("location")]
     public GeoLocation Location { get; set; } = new();
 
-    [BsonElement("address")]
-    [BsonIgnoreIfNull]
-    public string? Address { get; set; }
-
     [BsonElement("capacityKw")]
     public double CapacityKw { get; set; }
 

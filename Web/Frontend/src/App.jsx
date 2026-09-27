@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import BackofficeHome from "./pages/BackofficeHome";
 import ChangePassword from "./pages/ChangePassword";
 import CreateStaff from "./pages/CreateStaff";
+import CreateStation from "./pages/CreateStation";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
@@ -14,6 +15,8 @@ import ProsumerHome from "./pages/ProsumerHome";
 import RegisterProsumer from "./pages/RegisterProsumer";
 import ResetPassword from "./pages/ResetPassword";
 import Reservations from "./pages/Reservations";
+import StationDetail from "./pages/StationDetail";
+import Stations from "./pages/Stations";
 
 export default function App() {
   return (
@@ -31,9 +34,18 @@ export default function App() {
               <Route element={<ProtectedRoute roles={["Backoffice"]} />}>
                 <Route path="/backoffice" element={<BackofficeHome />} />
                 <Route path="/backoffice/staff/new" element={<CreateStaff />} />
+                <Route path="/stations/new" element={<CreateStation />} />
               </Route>
               <Route element={<ProtectedRoute roles={["GridOperator"]} />}>
                 <Route path="/operator" element={<OperatorHome />} />
+              </Route>
+              <Route
+                element={
+                  <ProtectedRoute roles={["Backoffice", "GridOperator"]} />
+                }
+              >
+                <Route path="/stations" element={<Stations />} />
+                <Route path="/stations/:id" element={<StationDetail />} />
               </Route>
               <Route element={<ProtectedRoute roles={["Prosumer"]} />}>
                 <Route path="/prosumer" element={<ProsumerHome />} />

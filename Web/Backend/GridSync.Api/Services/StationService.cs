@@ -48,7 +48,6 @@ public class StationService
             StationCode = stationCode,
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
-            Address = request.Address?.Trim(),
             Location = new GeoLocation {
                 Type = "Point",
                 Coordinates = new[] { request.Longitude, request.Latitude }
@@ -114,7 +113,6 @@ public class StationService
         // Apply changes to the loaded station
         station.Name = request.Name.Trim();
         station.Description = request.Description?.Trim();
-        station.Address = request.Address?.Trim();
         station.Location = new GeoLocation
         {
             Type = "Point",
@@ -237,7 +235,6 @@ public class StationService
         StationCode = s.StationCode,
         Name = s.Name,
         Description = s.Description,
-        Address = s.Address,
         // GeoJSON: index 0 = longitude, index 1 = latitude
         Longitude = s.Location.Coordinates[0],
         Latitude = s.Location.Coordinates[1],

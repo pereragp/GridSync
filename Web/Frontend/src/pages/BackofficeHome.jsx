@@ -111,12 +111,20 @@ export default function BackofficeHome() {
             </p>
           </div>
 
-          <Link
-            to="/backoffice/staff/new"
-            className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50"
-          >
-            Create staff user
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to="/stations"
+              className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+            >
+              Manage stations
+            </Link>
+            <Link
+              to="/backoffice/staff/new"
+              className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50"
+            >
+              Create staff user
+            </Link>
+          </div>
         </div>
       </section>
 
