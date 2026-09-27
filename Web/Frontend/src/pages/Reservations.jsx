@@ -54,6 +54,7 @@ function toIsoUtc(localValue) {
 function emptyCreateForm() {
   const visit = defaultVisitWindow();
   return {
+    stationId: "",
     slotId: "",
     reservationType: "Charging",
     energyKwh: "",
@@ -112,9 +113,30 @@ export default function Reservations() {
     load();
   }, [load]);
 
+  const stations = useMemo(() => {
+    const byId = new Map();
+    for (const slot of availableSlots) {
+      if (!slot.stationId || byId.has(slot.stationId)) continue;
+      byId.set(slot.stationId, {
+        id: slot.stationId,
+        name: slot.stationName || "Unknown station",
+      });
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }, [availableSlots]);
+
+  const batteriesForStation = useMemo(() => {
+    if (!form.stationId) return [];
+    return availableSlots
+      .filter((s) => s.stationId === form.stationId)
+      .sort((a, b) => (a.batteryIndex ?? 0) - (b.batteryIndex ?? 0));
+  }, [availableSlots, form.stationId]);
+
   const selectedSlot = useMemo(
-    () => availableSlots.find((s) => s.id === form.slotId) || null,
-    [availableSlots, form.slotId],
+    () => batteriesForStation.find((s) => s.id === form.slotId) || null,
+    [batteriesForStation, form.slotId],
   );
 
   const availableForType = selectedSlot
@@ -248,30 +270,57 @@ export default function Reservations() {
       <section className={`${cardClass} mb-6`}>
         <h2 className="mb-1 text-lg font-medium">Create reservation</h2>
         <p className="mb-4 text-sm text-slate-600">
-          Select a battery, choose Charging (deposit energy into the battery) or
-          Drop-off (withdraw stored energy), enter kWh, and set your visit window
-          within the next 7 days.
+          Choose a station, then pick an available battery. Select Charging
+          (deposit energy) or Drop-off (withdraw energy), enter kWh, and set your
+          visit window within the next 7 days.
         </p>
         <form onSubmit={onCreate} className="grid gap-3 md:grid-cols-2">
+          <Field label="Station">
+            <select
+              className={inputClass}
+              value={form.stationId}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  stationId: e.target.value,
+                  slotId: "",
+                })
+              }
+              required
+              disabled={stations.length === 0}
+            >
+              <option value="">
+                {stations.length
+                  ? "Select a station"
+                  : "No stations with available batteries"}
+              </option>
+              {stations.map((station) => (
+                <option key={station.id} value={station.id}>
+                  {station.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Battery">
             <select
               className={inputClass}
               value={form.slotId}
               onChange={(e) => setForm({ ...form, slotId: e.target.value })}
               required
-              disabled={availableSlots.length === 0}
+              disabled={!form.stationId || batteriesForStation.length === 0}
             >
               <option value="">
-                {availableSlots.length
-                  ? "Select a battery"
-                  : "No batteries available"}
+                {!form.stationId
+                  ? "Select a station first"
+                  : batteriesForStation.length
+                    ? "Select a battery"
+                    : "No batteries available at this station"}
               </option>
-              {availableSlots.map((slot) => (
+              {batteriesForStation.map((slot) => (
                 <option key={slot.id} value={slot.id}>
-                  {slot.stationName} · Battery #{slot.batteryIndex} · Cap{" "}
-                  {slot.capacityKwh} kWh · Charge avail{" "}
-                  {Number(slot.availableChargingKwh).toFixed(1)} · Drop-off
-                  avail {Number(slot.availableDropOffKwh).toFixed(1)}
+                  Battery #{slot.batteryIndex} · Cap {slot.capacityKwh} kWh ·
+                  Charge avail {Number(slot.availableChargingKwh).toFixed(1)} ·
+                  Drop-off avail {Number(slot.availableDropOffKwh).toFixed(1)}
                 </option>
               ))}
             </select>
@@ -307,19 +356,19 @@ export default function Reservations() {
             />
           </Field>
           {selectedSlot ? (
-            <div className="rounded-lg border border-grid-100 bg-grid-50 px-3 py-2 text-sm text-slate-700 md:col-span-1 self-end mb-3">
+            <div className="mb-3 self-end rounded-lg border border-grid-100 bg-grid-50 px-3 py-2 text-sm text-slate-700 md:col-span-2">
+              <p className="font-medium text-grid-900">
+                {selectedSlot.stationName} · Battery #{selectedSlot.batteryIndex}
+              </p>
               <p>
                 Actual stored:{" "}
                 <strong>{Number(selectedSlot.actualEnergyKwh).toFixed(2)} kWh</strong>
-              </p>
-              <p>
+                {" · "}
                 Capacity:{" "}
                 <strong>{Number(selectedSlot.capacityKwh).toFixed(2)} kWh</strong>
               </p>
             </div>
-          ) : (
-            <div />
-          )}
+          ) : null}
           <Field label="Visit start">
             <input
               className={inputClass}
