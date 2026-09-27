@@ -298,7 +298,6 @@ public class StationService
             StationCode = baseResponse.StationCode,
             Name = baseResponse.Name,
             Description = baseResponse.Description,
-            Address = baseResponse.Address,
             Longitude = baseResponse.Longitude,
             Latitude = baseResponse.Latitude,
             CapacityKw = baseResponse.CapacityKw,
