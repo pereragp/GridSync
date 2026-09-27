@@ -44,7 +44,9 @@ export default function App() {
               </Route>
               <Route
                 element={
-                  <ProtectedRoute roles={["Backoffice", "GridOperator"]} />
+                  <ProtectedRoute
+                    roles={["Backoffice", "GridOperator", "Prosumer"]}
+                  />
                 }
               >
                 <Route path="/stations" element={<Stations />} />
@@ -62,11 +64,20 @@ export default function App() {
                 <Route index element={<Reservations />} />
               </Route>
               <Route
-                path='/backoffice'
-                element={<ProtectedRoute roles={['Backoffice']} />}
+                path="/backoffice"
+                element={<ProtectedRoute roles={["Backoffice"]} />}
               >
                 <Route index element={<BackofficeHome />} />
-                <Route path='staff/new' element={<CreateStaff />} />
+                <Route path="staff/new" element={<CreateStaff />} />
+                <Route
+                  path="reservations"
+                  element={
+                    <OperatorReservations
+                      title="Approve energy reservations"
+                      subtitle="Review prosumer Charging and Drop-off bookings. Approve to issue a QR, or reject with a reason."
+                    />
+                  }
+                />
               </Route>
               <Route
                 path='/operator'

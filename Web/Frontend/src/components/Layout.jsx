@@ -32,6 +32,9 @@ export default function Layout() {
                 <NavLink className={navClass} to='/backoffice'>
                   Users
                 </NavLink>
+                <NavLink className={navClass} to='/backoffice/reservations'>
+                  Reservations
+                </NavLink>
                 <NavLink className={navClass} to="/stations">
                   Stations
                 </NavLink>

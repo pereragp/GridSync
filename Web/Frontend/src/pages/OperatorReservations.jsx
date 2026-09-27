@@ -12,9 +12,12 @@ import {
   inputClass,
 } from "../components/ui";
 
-const statuses = ["", "Pending", "Approved", "Rejected", "Cancelled", "Expired"];
+const statuses = ["", "Pending", "Approved", "Rejected", "Cancelled", "Expired", "Completed"];
 
-export default function OperatorReservations() {
+export default function OperatorReservations({
+  title = "Reservation review",
+  subtitle = "Review battery energy bookings. Approving issues a QR; actual kWh changes only when the transfer is completed.",
+}) {
   const [reservations, setReservations] = useState([]);
   const [status, setStatus] = useState("Pending");
   const [search, setSearch] = useState("");
@@ -93,10 +96,7 @@ export default function OperatorReservations() {
 
   return (
     <div>
-      <PageHeader
-        title="Reservation review"
-        subtitle="Review bookings, approve valid requests, and reject requests with a reason."
-      />
+      <PageHeader title={title} subtitle={subtitle} />
       {error ? <Alert>{error}</Alert> : null}
       {message ? <Alert type="success">{message}</Alert> : null}
 
@@ -174,7 +174,11 @@ function ReservationRow({ reservation, busy, onApprove, onReject }) {
             {reservation.stationName || "Station unavailable"} · {reservation.prosumerNic || "NIC unavailable"}
           </p>
           <p className="text-sm text-slate-600">
-            {formatDate(reservation.slotStart)} - {formatDate(reservation.slotEnd)} · {reservation.reservationType}
+            {formatDate(reservation.slotStart)} - {formatDate(reservation.slotEnd)} ·{" "}
+            {reservation.reservationType === "DropOff"
+              ? "Drop-off"
+              : reservation.reservationType}{" "}
+            · <strong>{reservation.energyKwh} kWh</strong>
           </p>
           {reservation.status === "Rejected" && reservation.rejectionReason ? (
             <p className="mt-1 text-sm text-red-700">Reason: {reservation.rejectionReason}</p>

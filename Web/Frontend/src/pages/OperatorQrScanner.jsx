@@ -185,8 +185,12 @@ function VerificationResult({ result, onComplete, completing }) {
         label='Time'
         value={`${formatDate(result.slotStart)} - ${formatDate(result.slotEnd)}`}
       />
-      <Detail label='Type' value={result.reservationType} />
+      <Detail label='Type' value={result.reservationType === 'DropOff' ? 'Drop-off' : result.reservationType} />
       <Detail label='Energy' value={`${result.energyKwh} kWh`} />
+      <p className='text-xs text-slate-500'>
+        Completing applies actual energy on the battery (Charging decreases
+        stored kWh; Drop-off increases it) and clears the reserved amount.
+      </p>
       {result.status === 'Approved' ? (
         <button
           type='button'

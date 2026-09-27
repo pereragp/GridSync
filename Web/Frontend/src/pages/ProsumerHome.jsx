@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getProsumerDashboardStats } from "../api/reservations";
 import { getUser, requestDeactivation } from "../api/users";
 import { useAuth } from "../context/AuthContext";
 
@@ -9,6 +10,7 @@ const HERO_IMAGE =
 export default function ProsumerHome() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -17,8 +19,14 @@ export default function ProsumerHome() {
     let cancelled = false;
     (async () => {
       try {
-        const data = await getUser(user.userId);
-        if (!cancelled) setProfile(data);
+        const [data, dash] = await Promise.all([
+          getUser(user.userId),
+          getProsumerDashboardStats().catch(() => null),
+        ]);
+        if (!cancelled) {
+          setProfile(data);
+          setStats(dash);
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not load account details");
       }
@@ -50,7 +58,6 @@ export default function ProsumerHome() {
 
   return (
     <div className="space-y-8">
-      {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
         <div className="absolute inset-0">
           <img
@@ -69,8 +76,8 @@ export default function ProsumerHome() {
             Welcome back, {user.fullName.split(" ")[0]}.
           </h1>
           <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-            Manage your solar trading account, prepare energy reservations, and
-            stay connected to nearby microgrid nodes.
+            Book Charging or Drop-off energy on station batteries, track
+            approvals, and present your QR at the hub.
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -95,13 +102,25 @@ export default function ProsumerHome() {
         </div>
       ) : null}
 
-      {/* Status callout */}
+      {isActive ? (
+        <section className="grid gap-4 sm:grid-cols-2">
+          <StatCard
+            label="Pending bookings"
+            value={stats?.pendingReservations}
+          />
+          <StatCard
+            label="Active (approved) bookings"
+            value={stats?.activeReservations}
+          />
+        </section>
+      ) : null}
+
       {isPending ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950">
           <h2 className="font-semibold">Account pending approval</h2>
           <p className="mt-1 text-sm text-amber-900/80">
-            Your registration is waiting for Backoffice activation. You can update
-            your profile now; booking and QR features unlock after approval.
+            Your registration is waiting for Backoffice activation. Booking and
+            QR features unlock after approval.
           </p>
         </section>
       ) : null}
@@ -110,13 +129,26 @@ export default function ProsumerHome() {
         <section className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-slate-800">
           <h2 className="font-semibold">Deactivation requested</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Your request is on file. A Backoffice officer will complete the process.
+            Your request is on file. A Backoffice officer will complete the
+            process.
           </p>
         </section>
       ) : null}
 
-      {/* Quick actions */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ActionCard
+          title="Book energy"
+          description="Reserve Charging or Drop-off kWh on a station battery for a visit window."
+          to="/reservations"
+          cta="Open reservations"
+          disabled={!isActive}
+        />
+        <ActionCard
+          title="Stations"
+          description="Browse microgrid hubs and nearby nodes before you book."
+          to="/stations"
+          cta="View stations"
+        />
         <ActionCard
           title="Profile"
           description="Update your name, phone, and address details."
@@ -129,7 +161,7 @@ export default function ProsumerHome() {
           to="/change-password"
           cta="Change password"
         />
-        <div className="rounded-2xl border border-dashed border-grid-300 bg-white p-5">
+        <div className="rounded-2xl border border-dashed border-grid-300 bg-white p-5 sm:col-span-2 lg:col-span-1">
           <h3 className="font-semibold text-grid-900">Account status</h3>
           <p className="mt-1 text-sm text-slate-600">
             {isActive
@@ -149,34 +181,40 @@ export default function ProsumerHome() {
         </div>
       </section>
 
-      {/* Upcoming features */}
       <section>
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight text-grid-900">
-              Coming next on your portal
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              These flows will connect to the reservation, map, and QR APIs.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
+        <h2 className="text-xl font-semibold tracking-tight text-grid-900">
+          How battery booking works
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Each station battery has capacity, actual stored energy, and reserved
+          pools for Charging and Drop-off.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <FeaturePreview
-            title="Energy bookings"
-            detail="Reserve, update, and cancel charging or drop-off slots within the 7-day window."
+            title="1. Reserve kWh"
+            detail="Charging books against capacity − reserved. Drop-off books against free space."
           />
           <FeaturePreview
-            title="Nearby grid nodes"
-            detail="View microgrid stations on the map using live GPS locations from the API."
+            title="2. Get QR"
+            detail="After Backoffice/Operator approval, your transaction QR is issued."
           />
           <FeaturePreview
-            title="Transaction QR"
-            detail="Generate a secure QR after approval for operator verification at the hub."
+            title="3. Complete on site"
+            detail="When the operator scans your QR, actual energy on the battery is updated."
           />
         </div>
       </section>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-slate-600">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-grid-800">
+        {value ?? "…"}
+      </p>
     </div>
   );
 }
@@ -199,17 +237,23 @@ function StatusChip({ status }) {
   );
 }
 
-function ActionCard({ title, description, to, cta }) {
+function ActionCard({ title, description, to, cta, disabled }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-grid-300 hover:shadow-md">
       <h3 className="font-semibold text-grid-900">{title}</h3>
       <p className="mt-1 text-sm text-slate-600">{description}</p>
-      <Link
-        to={to}
-        className="mt-4 inline-flex rounded-lg bg-grid-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-grid-800"
-      >
-        {cta}
-      </Link>
+      {disabled ? (
+        <span className="mt-4 inline-flex rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400">
+          Available after activation
+        </span>
+      ) : (
+        <Link
+          to={to}
+          className="mt-4 inline-flex rounded-lg bg-grid-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-grid-800"
+        >
+          {cta}
+        </Link>
+      )}
     </div>
   );
 }
@@ -217,9 +261,6 @@ function ActionCard({ title, description, to, cta }) {
 function FeaturePreview({ title, detail }) {
   return (
     <div className="rounded-2xl border border-grid-100 bg-gradient-to-br from-grid-50 to-white p-5">
-      <div className="mb-3 inline-flex rounded-full bg-grid-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-grid-700">
-        Soon
-      </div>
       <h3 className="font-semibold text-grid-900">{title}</h3>
       <p className="mt-1 text-sm leading-relaxed text-slate-600">{detail}</p>
     </div>
