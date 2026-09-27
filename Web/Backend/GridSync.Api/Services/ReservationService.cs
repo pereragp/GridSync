@@ -481,11 +481,11 @@ public class ReservationService
 
         if (reservationType == ReservationTypes.Charging)
         {
-            // Charging: request <= Capacity - ReservedCharging
+            // Charging deposits energy: request <= free space (Capacity - Actual - ReservedCharging)
             filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
                 s.Id == slotId &&
                 s.Status == SlotStatus.Available &&
-                s.CapacityKwh - s.ReservedChargingKwh >= energyKwh);
+                s.CapacityKwh - s.ActualEnergyKwh - s.ReservedChargingKwh >= energyKwh);
 
             update = Builders<EnergyBookingSlot>.Update
                 .Inc(s => s.ReservedChargingKwh, energyKwh)
@@ -493,11 +493,11 @@ public class ReservationService
         }
         else
         {
-            // DropOff: request <= Capacity - Actual - ReservedDropOff (free space)
+            // Drop-off withdraws energy: request <= stored energy not already reserved
             filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
                 s.Id == slotId &&
                 s.Status == SlotStatus.Available &&
-                s.CapacityKwh - s.ActualEnergyKwh - s.ReservedDropOffKwh >= energyKwh);
+                s.ActualEnergyKwh - s.ReservedDropOffKwh >= energyKwh);
 
             update = Builders<EnergyBookingSlot>.Update
                 .Inc(s => s.ReservedDropOffKwh, energyKwh)
@@ -512,8 +512,8 @@ public class ReservationService
         if (claimed is null)
         {
             var reason = reservationType == ReservationTypes.Charging
-                ? "Not enough charging capacity remaining on this battery."
-                : "Not enough free space remaining on this battery for drop-off.";
+                ? "Not enough free capacity remaining on this battery for charging."
+                : "Not enough actual energy available on this battery for drop-off.";
             throw new InvalidOperationException(reason);
         }
     }
@@ -542,7 +542,10 @@ public class ReservationService
         }
     }
 
-    /// <summary>On QR complete: apply Actual ± kWh and clear the matching reserved pool.</summary>
+    /// <summary>
+    /// On QR complete: Charging adds actual energy; Drop-off removes it.
+    /// Reserved pools are cleared for the completed amount.
+    /// </summary>
     private async Task ApplyCompletionInventoryAsync(EnergyReservation reservation)
     {
         FilterDefinition<EnergyBookingSlot> filter;
@@ -550,25 +553,27 @@ public class ReservationService
 
         if (reservation.ReservationType == ReservationTypes.Charging)
         {
+            // Deposit into battery: free space must still cover the reserved amount
             filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
                 s.Id == reservation.SlotId &&
-                s.ActualEnergyKwh >= reservation.EnergyKwh &&
+                s.ActualEnergyKwh + reservation.EnergyKwh <= s.CapacityKwh &&
                 s.ReservedChargingKwh >= reservation.EnergyKwh);
 
             update = Builders<EnergyBookingSlot>.Update
-                .Inc(s => s.ActualEnergyKwh, -reservation.EnergyKwh)
+                .Inc(s => s.ActualEnergyKwh, reservation.EnergyKwh)
                 .Inc(s => s.ReservedChargingKwh, -reservation.EnergyKwh)
                 .Set(s => s.UpdatedAt, DateTime.UtcNow);
         }
         else
         {
+            // Withdraw from battery: actual energy must cover the reserved amount
             filter = Builders<EnergyBookingSlot>.Filter.Where(s =>
                 s.Id == reservation.SlotId &&
-                s.ActualEnergyKwh + reservation.EnergyKwh <= s.CapacityKwh &&
+                s.ActualEnergyKwh >= reservation.EnergyKwh &&
                 s.ReservedDropOffKwh >= reservation.EnergyKwh);
 
             update = Builders<EnergyBookingSlot>.Update
-                .Inc(s => s.ActualEnergyKwh, reservation.EnergyKwh)
+                .Inc(s => s.ActualEnergyKwh, -reservation.EnergyKwh)
                 .Inc(s => s.ReservedDropOffKwh, -reservation.EnergyKwh)
                 .Set(s => s.UpdatedAt, DateTime.UtcNow);
         }
@@ -581,8 +586,8 @@ public class ReservationService
         if (updated is null)
         {
             var reason = reservation.ReservationType == ReservationTypes.Charging
-                ? "Cannot complete charging: battery does not hold enough actual energy."
-                : "Cannot complete drop-off: battery does not have enough free capacity.";
+                ? "Cannot complete charging: battery does not have enough free capacity."
+                : "Cannot complete drop-off: battery does not hold enough actual energy.";
             throw new InvalidOperationException(reason);
         }
     }
@@ -646,11 +651,13 @@ public class ReservationService
             throw new InvalidOperationException("SlotEnd must be after SlotStart.");
     }
 
+    /// <summary>Free space still available to charge into the battery.</summary>
     private static double AvailableCharging(EnergyBookingSlot s) =>
-        Math.Max(s.CapacityKwh - s.ReservedChargingKwh, 0);
+        Math.Max(s.CapacityKwh - s.ActualEnergyKwh - s.ReservedChargingKwh, 0);
 
+    /// <summary>Stored energy available to drop off / withdraw (excludes pending drop-off reserves).</summary>
     private static double AvailableDropOff(EnergyBookingSlot s) =>
-        Math.Max(s.CapacityKwh - s.ActualEnergyKwh - s.ReservedDropOffKwh, 0);
+        Math.Max(s.ActualEnergyKwh - s.ReservedDropOffKwh, 0);
 
     private static DateTime EnsureUtc(DateTime value) =>
         value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);

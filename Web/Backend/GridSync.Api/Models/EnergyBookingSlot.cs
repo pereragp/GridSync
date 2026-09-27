@@ -30,11 +30,11 @@ public class EnergyBookingSlot
     [BsonElement("actualEnergyKwh")]
     public double ActualEnergyKwh { get; set; }
 
-    /// <summary>kWh soft-locked by Pending/Approved Charging reservations.</summary>
+    /// <summary>kWh soft-locked by Pending/Approved Charging reservations (free space to deposit).</summary>
     [BsonElement("reservedChargingKwh")]
     public double ReservedChargingKwh { get; set; }
 
-    /// <summary>kWh soft-locked by Pending/Approved DropOff reservations (free space).</summary>
+    /// <summary>kWh soft-locked by Pending/Approved DropOff reservations (stored energy).</summary>
     [BsonElement("reservedDropOffKwh")]
     public double ReservedDropOffKwh { get; set; }
 
