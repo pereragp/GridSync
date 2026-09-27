@@ -1,0 +1,294 @@
+using System.Security.Claims;
+using GridSync.Api.Models;
+using GridSync.Api.Models.Dtos;
+using GridSync.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GridSync.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+[Authorize]
+public class ReservationsController : ControllerBase
+{
+    private readonly ReservationService _reservationService;
+
+    public ReservationsController(ReservationService reservationService)
+    {
+        _reservationService = reservationService;
+    }
+
+    /// <summary>
+    /// GET /api/reservations/{id}
+    /// </summary>
+    [HttpGet("{id:length(24)}")]
+    public async Task<IActionResult> GetById(string id)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        var staffAccess = User.IsInRole(UserRoles.Backoffice) || User.IsInRole(UserRoles.GridOperator);
+        try
+        {
+            var reservation = await _reservationService.GetByIdAsync(userId, id, staffAccess);
+            return Ok(reservation);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/reservations/history
+    /// </summary>
+    [HttpGet("history")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> GetHistory([FromQuery] string? status)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        var reservations = await _reservationService.GetHistoryAsync(prosumerId, status);
+        return Ok(reservations);
+    }
+
+    /// <summary>
+    /// GET /api/reservations/upcoming
+    /// </summary>
+    [HttpGet("upcoming")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> GetUpcoming([FromQuery] string? status)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        var reservations = await _reservationService.GetUpcomingAsync(prosumerId, status);
+        return Ok(reservations);
+    }
+
+    /// <summary>
+    /// GET /api/reservations/manage?status=Pending
+    /// </summary>
+    [HttpGet("manage")]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    public async Task<IActionResult> Manage([FromQuery] string? status)
+    {
+        var reservations = await _reservationService.GetForStaffAsync(status);
+        return Ok(reservations);
+    }
+
+    /// <summary>
+    /// GET /api/reservations/slots — available slots for a new prosumer reservation.
+    /// </summary>
+    [HttpGet("slots")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> GetAvailableSlots()
+    {
+        var slots = await _reservationService.GetAvailableSlotsAsync();
+        return Ok(slots);
+    }
+
+    /// <summary>
+    /// POST /api/reservations
+    /// </summary>
+    [HttpPost]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> Create([FromBody] CreateReservationRequest request)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            var reservation = await _reservationService.CreateAsync(prosumerId, request);
+            return Created($"/api/reservations/{reservation.Id}", reservation);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// PUT /api/reservations/{id}
+    /// </summary>
+    [HttpPut("{id}")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> Update(string id, [FromBody] UpdateReservationRequest request)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            var reservation = await _reservationService.UpdateAsync(prosumerId, id, request);
+            return Ok(reservation);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/reservations/{id}/cancel
+    /// </summary>
+    [HttpPost("{id}/cancel")]
+    [Authorize(Roles = UserRoles.Prosumer)]
+    public async Task<IActionResult> Cancel(string id, [FromBody] CancelReservationRequest? request)
+    {
+        var prosumerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(prosumerId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            var reservation = await _reservationService.CancelAsync(
+                prosumerId,
+                id,
+                request ?? new CancelReservationRequest());
+            return Ok(reservation);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/reservations/{id}/approve
+    /// </summary>
+    [HttpPost("{id}/approve")]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    public async Task<IActionResult> Approve(string id)
+    {
+        return await Review(id, true, new ReviewReservationRequest());
+    }
+
+    /// <summary>
+    /// POST /api/reservations/{id}/reject
+    /// </summary>
+    [HttpPost("{id}/reject")]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    public async Task<IActionResult> Reject(string id, [FromBody] ReviewReservationRequest request)
+    {
+        return await Review(id, false, request);
+    }
+
+    /// <summary>
+    /// POST /api/reservations/verify-qr
+    /// </summary>
+    [HttpPost("verify-qr")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> VerifyQr([FromBody] VerifyReservationQrRequest request)
+    {
+        try
+        {
+            var result = await _reservationService.VerifyQrAsync(request.QrPayload);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// POST /api/reservations/{id}/complete
+    /// </summary>
+    [HttpPost("{id}/complete")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> Complete(string id)
+    {
+        var operatorId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(operatorId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            return Ok(await _reservationService.CompleteAsync(operatorId, id));
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// GET /api/reservations/dashboard-stats
+    /// </summary>
+    [HttpGet("dashboard-stats")]
+    [Authorize(Roles = UserRoles.GridOperator)]
+    public async Task<IActionResult> DashboardStats()
+    {
+        return Ok(await _reservationService.GetDashboardStatsAsync());
+    }
+
+    private async Task<IActionResult> Review(string id, bool approve, ReviewReservationRequest request)
+    {
+        var staffId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(staffId))
+        {
+            return Unauthorized(new { message = "Authenticated user id is missing." });
+        }
+
+        try
+        {
+            var reservation = await _reservationService.ReviewAsync(staffId, id, approve, request);
+            return Ok(reservation);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+}
