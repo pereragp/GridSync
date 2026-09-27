@@ -26,11 +26,9 @@ public class StationsController : ControllerBase
         _stationService = stationService;
     }
 
-    /// <summary>
-    /// POST /api/stations — Backoffice creates a new solar hub
-    /// </summary>
+    /// <summary>POST /api/stations/create — Backoffice or GridOperator creates a solar hub.</summary>
     [HttpPost("create")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Create([FromBody] CreateStationRequest request)
     {
         var createdBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
@@ -44,9 +42,7 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// GET /api/stations 
-    /// </summary>
+    /// <summary>GET /api/stations</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -54,9 +50,24 @@ public class StationsController : ControllerBase
         return Ok(stations);
     }
 
-    /// <summary>
-    /// GET /api/stations/{id} — fetch a single station by id
-    /// </summary>
+    /// <summary>GET /api/stations/nearby?lat=&amp;lng=&amp;radiusKm=10</summary>
+    [HttpGet("nearby")]
+    public async Task<IActionResult> GetNearby(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] double radiusKm = 10)
+    {
+        try
+        {
+            return Ok(await _stationService.GetNearbyAsync(lat, lng, radiusKm));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>GET /api/stations/{id}</summary>
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
@@ -71,11 +82,9 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// PUT /api/stations/{id} — Backoffice does a full update of station details.
-    /// </summary>
+    /// <summary>PUT /api/stations/{id} — Backoffice or GridOperator updates station details.</summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateStationRequest request)
     {
         try
@@ -115,11 +124,9 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// POST /api/stations/{id}/deactivate — Backoffice deactivates a node.
-    /// </summary>
+    /// <summary>POST /api/stations/{id}/deactivate — blocked if active reservations exist.</summary>
     [HttpPost("{id}/deactivate")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Deactivate(string id)
     {
         try

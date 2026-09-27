@@ -25,12 +25,9 @@ public class UsersController : ControllerBase
         _userService = userService;
     }
 
-    /// <summary>
-    /// POST /api/users/staff — create Backoffice or GridOperator.
-    /// AllowAnonymous so the first admin can be seeded; lock this down later if needed.
-    /// </summary>
+    /// <summary>POST /api/users/staff — Backoffice creates Backoffice or GridOperator accounts.</summary>
     [HttpPost("staff")]
-    [AllowAnonymous]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> CreateStaff([FromBody] CreateStaffUserRequest request)
     {
         // Create staff account via service.
