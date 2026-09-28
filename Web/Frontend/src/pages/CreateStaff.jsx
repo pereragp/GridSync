@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { createStaff } from "../api/users";
+import PageBleedHero from "../components/PageBleedHero";
 
 const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?auto=format&fit=crop&w=1800&q=80";
+  "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=2000&q=80";
 
 const ROLES = [
   {
@@ -14,7 +15,7 @@ const ROLES = [
   {
     value: "GridOperator",
     title: "Grid Operator",
-    detail: "Battery availability, power trading bookings, and on-site QR transfers.",
+    detail: "Battery availability and power trading bookings. QR transfer completion is on the mobile app.",
   },
 ];
 
@@ -61,39 +62,22 @@ export default function CreateStaff() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
-        <div className="absolute inset-0">
-          <img
-            src={HERO_IMAGE}
-            alt="Solar panels under open sky"
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-grid-900/92 via-grid-800/80 to-grid-700/40" />
-        </div>
-
-        <div className="relative z-10 flex flex-col gap-4 px-6 py-10 sm:px-10 sm:py-12 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
-              Backoffice console
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              Create staff user
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              Provision Backoffice or Grid Operator accounts with secure credentials
-              and role-based access to GridSync.
-            </p>
-          </div>
+    <div>
+      <PageBleedHero
+        image={HERO_IMAGE}
+        imageAlt="Professionals collaborating in an office"
+        eyebrow="Backoffice console"
+        title="Create staff user"
+        subtitle="Provision Backoffice or Grid Operator accounts with secure credentials and role-based access to GridSync."
+        actions={
           <Link
-            to="/backoffice"
-            className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+            to="/backoffice/users"
+            className="inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/18"
           >
             Back to users
           </Link>
-        </div>
-      </section>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Role picker */}
@@ -232,7 +216,7 @@ export default function CreateStaff() {
                   {loading ? "Creating account…" : `Create ${form.role}`}
                 </button>
                 <Link
-                  to="/backoffice"
+                  to="/backoffice/users"
                   className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
                   Cancel

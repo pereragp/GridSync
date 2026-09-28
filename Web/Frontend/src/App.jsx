@@ -4,13 +4,14 @@ import { FeedbackProvider } from "./context/FeedbackContext";
 import { ProtectedRoute, PublicOnlyRoute } from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import BackofficeHome from "./pages/BackofficeHome";
+import BackofficeUsers from "./pages/BackofficeUsers";
 import ChangePassword from "./pages/ChangePassword";
 import CreateStaff from "./pages/CreateStaff";
 import CreateStation from "./pages/CreateStation";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
-import OperatorQrScanner from './pages/OperatorQrScanner';
+import OperatorReservations from "./pages/OperatorReservations";
 import Profile from "./pages/Profile";
 import ProsumerHome from "./pages/ProsumerHome";
 import RegisterProsumer from "./pages/RegisterProsumer";
@@ -62,6 +63,7 @@ export default function App() {
                 element={<ProtectedRoute roles={["Backoffice"]} />}
               >
                 <Route index element={<BackofficeHome />} />
+                <Route path="users" element={<BackofficeUsers />} />
                 <Route path="staff/new" element={<CreateStaff />} />
                 <Route
                   path="reservations"
@@ -73,11 +75,7 @@ export default function App() {
                 element={<ProtectedRoute roles={['GridOperator']} />}
               >
                 <Route index element={<OperatorHome />} />
-                <Route
-                  path='reservations'
-                  element={<Navigate to='/operator' replace />}
-                />
-                <Route path='qr-scanner' element={<OperatorQrScanner />} />
+                <Route path='reservations' element={<OperatorReservations />} />
               </Route>
             </Route>
           </Route>

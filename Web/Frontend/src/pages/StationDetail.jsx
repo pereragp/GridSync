@@ -14,11 +14,12 @@ import {
 } from "../api/stations";
 import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
+import PageBleedHero from "../components/PageBleedHero";
 import { useAuth } from "../context/AuthContext";
 import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1800&q=80";
+  "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2000&q=80";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -271,57 +272,65 @@ export default function StationDetail() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
-        <div className="absolute inset-0">
-          <img
-            src={HERO_IMAGE}
-            alt="Renewable energy landscape"
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-grid-900/92 via-grid-800/80 to-grid-700/40" />
-        </div>
-
-        <div className="relative z-10 px-6 py-8 sm:px-10 sm:py-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
-            {station.stationCode}
-          </p>
-          <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
-            {station.name}
-          </h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-            {station.totalCapacityKwh} kWh total · {station.batteryCapacityKwh}{" "}
-            kWh/battery · {station.availableBatterySlots} slots
-          </p>
-          <div className="mt-3">
-            <StatusBadge status={station.status} light />
-          </div>
-
-          <nav
-            className="mt-8 flex flex-wrap gap-1 rounded-xl bg-black/20 p-1.5 backdrop-blur-sm"
-            aria-label="Station sections"
+    <div>
+      <PageBleedHero
+        image={HERO_IMAGE}
+        imageAlt="Solar panels at a microgrid station"
+        actions={
+          <Link
+            to="/stations"
+            className="inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/18"
           >
-            {STATION_TABS.map((tab) => {
-              const selected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition sm:px-4 ${
-                    selected
-                      ? "bg-white text-grid-900 shadow-sm"
-                      : "text-white/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
+            All stations
+          </Link>
+        }
+      >
+        <p className="gs-animate-fade-up text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
+          {station.stationCode}
+        </p>
+        <h1 className="gs-animate-fade-up mt-3 font-display text-4xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
+          {station.name}
+        </h1>
+        <p
+          className="gs-animate-fade-up mt-4 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base"
+          style={{ animationDelay: "120ms" }}
+        >
+          {station.totalCapacityKwh} kWh total · {station.batteryCapacityKwh}{" "}
+          kWh/battery · {station.availableBatterySlots} slots
+        </p>
+        <div
+          className="gs-animate-fade-up mt-3"
+          style={{ animationDelay: "160ms" }}
+        >
+          <StatusBadge status={station.status} light />
         </div>
-      </section>
 
+        <nav
+          className="gs-animate-fade-up mt-8 flex flex-wrap gap-1 rounded-xl bg-black/20 p-1.5 backdrop-blur-sm"
+          style={{ animationDelay: "200ms" }}
+          aria-label="Station sections"
+        >
+          {STATION_TABS.map((tab) => {
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition sm:px-4 ${
+                  selected
+                    ? "bg-white text-grid-900 shadow-sm"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </PageBleedHero>
+
+      <div className="space-y-6">
       {error ? (
         <AlertMessage type="error" title="Something went wrong" onDismiss={() => setError("")}>
           {error}
@@ -725,6 +734,7 @@ export default function StationDetail() {
           )}
         </section>
       ) : null}
+      </div>
     </div>
   );
 }
