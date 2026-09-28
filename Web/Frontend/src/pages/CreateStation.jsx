@@ -3,10 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { createStation } from "../api/stations";
 import AlertMessage from "../components/AlertMessage";
 import LocationPicker from "../components/LocationPicker";
+import PageBleedHero from "../components/PageBleedHero";
 import { useFeedback } from "../context/FeedbackContext";
 
 const HERO_IMAGE =
-  "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=1800&q=80";
+  "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=2000&q=80";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -84,38 +85,22 @@ export default function CreateStation() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
-        <div className="absolute inset-0">
-          <img
-            src={HERO_IMAGE}
-            alt="Solar installation under clear sky"
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-grid-900/92 via-grid-800/80 to-grid-700/40" />
-        </div>
-
-        <div className="relative z-10 flex flex-col gap-4 px-6 py-10 sm:px-10 sm:py-12 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
-              Backoffice console
-            </p>
-            <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              Create solar station
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              Register a new microgrid hub with location, capacity, battery slots,
-              and operating hours. A unique station code is generated automatically.
-            </p>
-          </div>
+    <div>
+      <PageBleedHero
+        image={HERO_IMAGE}
+        imageAlt="Solar installation under clear sky"
+        eyebrow="Backoffice console"
+        title="Create solar station"
+        subtitle="Register a new microgrid hub with location, capacity, battery slots, and operating hours. A unique station code is generated automatically."
+        actions={
           <Link
             to="/stations"
-            className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+            className="inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/18"
           >
             Back to stations
           </Link>
-        </div>
-      </section>
+        }
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-6">

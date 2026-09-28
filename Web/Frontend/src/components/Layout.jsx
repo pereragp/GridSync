@@ -31,6 +31,10 @@ export default function Layout() {
                   <NavIconHome />
                   Home
                 </NavLink>
+                <NavLink className={navClass} to='/backoffice/users'>
+                  <NavIconUsers />
+                  Users
+                </NavLink>
                 <NavLink className={navClass} to='/stations'>
                   <NavIconStations />
                   Stations
@@ -52,13 +56,13 @@ export default function Layout() {
                   <NavIconHome />
                   Home
                 </NavLink>
+                <NavLink className={navClass} to='/operator/reservations'>
+                  <NavIconBookings />
+                  Bookings
+                </NavLink>
                 <NavLink className={navClass} to='/stations'>
                   <NavIconStations />
                   Stations
-                </NavLink>
-                <NavLink className={navClass} to='/operator/qr-scanner'>
-                  <NavIconQr />
-                  Verify QR
                 </NavLink>
                 <NavLink className={navClass} to='/profile'>
                   <NavIconProfile />
@@ -143,13 +147,13 @@ export default function Layout() {
                     </Link>
                   </li>
                   <li>
-                    <Link className='hover:text-white' to='/stations'>
-                      Stations
+                    <Link className='hover:text-white' to='/operator/reservations'>
+                      Bookings
                     </Link>
                   </li>
                   <li>
-                    <Link className='hover:text-white' to='/operator/qr-scanner'>
-                      Verify QR
+                    <Link className='hover:text-white' to='/stations'>
+                      Stations
                     </Link>
                   </li>
                   <li>
@@ -163,6 +167,11 @@ export default function Layout() {
                   <li>
                     <Link className='hover:text-white' to='/backoffice'>
                       Home
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/backoffice/users'>
+                      Users
                     </Link>
                   </li>
                   <li>
@@ -217,7 +226,6 @@ export default function Layout() {
                   {user.role === 'GridOperator' ? 'Grid Operator' : user.role}
                 </span>
               </li>
-              <li>JWT-secured console</li>
             </ul>
           </div>
         </div>
@@ -291,7 +299,7 @@ function NavIconStations() {
   );
 }
 
-function NavIconStaff() {
+function NavIconUsers() {
   return (
     <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
       <path d='M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z' />
@@ -299,12 +307,20 @@ function NavIconStaff() {
   );
 }
 
-function NavIconQr() {
+function NavIconStaff() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path d='M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a5 5 0 00-5 5v1h10v-1a5 5 0 00-5-5zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z' />
+    </svg>
+  );
+}
+
+function NavIconBookings() {
   return (
     <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
       <path
         fillRule='evenodd'
-        d='M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 1v2h2V5H5zm8-2a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V4a1 1 0 00-1-1h-4zm1 2v2h2V5h-2zM3 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm2 1v2h2v-2H5zm9-1a1 1 0 00-1 1v1h1v1h-1v1a1 1 0 001 1h1v-1h1v1h1a1 1 0 001-1v-1h-1v-1h1v-1a1 1 0 00-1-1h-1v1h-1v-1h-1z'
+        d='M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z'
         clipRule='evenodd'
       />
     </svg>
