@@ -10,7 +10,6 @@ import CreateStation from "./pages/CreateStation";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
-import OperatorReservations from "./pages/OperatorReservations";
 import OperatorQrScanner from './pages/OperatorQrScanner';
 import Profile from "./pages/Profile";
 import ProsumerHome from "./pages/ProsumerHome";
@@ -35,12 +34,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route element={<ProtectedRoute roles={["Backoffice"]} />}>
-                <Route path="/backoffice" element={<BackofficeHome />} />
-                <Route path="/backoffice/staff/new" element={<CreateStaff />} />
                 <Route path="/stations/new" element={<CreateStation />} />
-              </Route>
-              <Route element={<ProtectedRoute roles={['GridOperator']} />}>
-                <Route path='/operator' element={<OperatorHome />} />
               </Route>
               <Route
                 element={
@@ -71,12 +65,7 @@ export default function App() {
                 <Route path="staff/new" element={<CreateStaff />} />
                 <Route
                   path="reservations"
-                  element={
-                    <OperatorReservations
-                      title="Approve energy reservations"
-                      subtitle="Review prosumer Charging and Drop-off bookings. Approve to issue a QR, or reject with a reason."
-                    />
-                  }
+                  element={<Navigate to="/backoffice" replace />}
                 />
               </Route>
               <Route
@@ -84,7 +73,10 @@ export default function App() {
                 element={<ProtectedRoute roles={['GridOperator']} />}
               >
                 <Route index element={<OperatorHome />} />
-                <Route path='reservations' element={<OperatorReservations />} />
+                <Route
+                  path='reservations'
+                  element={<Navigate to='/operator' replace />}
+                />
                 <Route path='qr-scanner' element={<OperatorQrScanner />} />
               </Route>
             </Route>

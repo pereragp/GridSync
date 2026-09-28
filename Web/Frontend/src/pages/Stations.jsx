@@ -16,14 +16,23 @@ export default function Stations() {
   const consoleLabel = isBackoffice
     ? "Backoffice console"
     : isOperator
-      ? "Operator console"
+      ? "Grid Operator"
       : "Prosumer portal";
   const consoleBlurb = isBackoffice
-    ? "Register microgrid hubs, update capacity, and deactivate nodes across the GridSync network."
+    ? "Register solar microgrid nodes, set capacity, and maintain operational schedules across the network."
     : isOperator
-      ? "Monitor station batteries, capacity, and operating schedules."
+      ? "View station schedules and update battery availability — close or reopen batteries for trading."
       : "Browse hubs and battery availability before booking Charging or Drop-off energy.";
-
+  const pageTitle = isOperator
+    ? "Battery stations"
+    : isBackoffice
+      ? "Microgrid nodes"
+      : "Solar stations";
+  const listSubtitle = isOperator
+    ? "Open a station to view its schedule and manage battery availability."
+    : isBackoffice
+      ? "Create hubs, edit capacity and location, update schedules, or deactivate nodes when needed."
+      : "Search by name, code, or description. Open a station to view details.";
 
   const [stations, setStations] = useState([]);
   const [error, setError] = useState("");
@@ -136,7 +145,7 @@ export default function Stations() {
               {consoleLabel}
             </p>
             <h1 className="gs-animate-fade-up mt-3 text-4xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
-              Solar stations
+              {pageTitle}
             </h1>
             <p
               className="gs-animate-fade-up mt-4 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base"
@@ -176,10 +185,14 @@ export default function Stations() {
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-grid-900">All stations</h2>
-              <p className="text-sm text-slate-600">
-                Search by name, code, or description. Open a station to edit details or schedule.
-              </p>
+              <h2 className="text-lg font-semibold text-grid-900">
+                {isOperator
+                  ? "Your stations"
+                  : isBackoffice
+                    ? "Registered nodes"
+                    : "All stations"}
+              </h2>
+              <p className="text-sm text-slate-600">{listSubtitle}</p>
             </div>
             <p className="text-sm text-slate-500">
               Showing{" "}
@@ -274,7 +287,11 @@ export default function Stations() {
                             to={`/stations/${s.id}`}
                             className="rounded-lg bg-grid-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-grid-800"
                           >
-                            Open
+                            {isOperator
+                              ? "Manage batteries"
+                              : isBackoffice
+                                ? "Manage node"
+                                : "Open"}
                           </Link>
                           {isBackoffice && s.status === "Active" ? (
                             <button

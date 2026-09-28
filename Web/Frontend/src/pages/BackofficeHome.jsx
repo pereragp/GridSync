@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  approveReservation,
-  getManagedReservations,
-  rejectReservation,
-} from "../api/reservations";
-import {
   approveUser,
   deactivateUser,
   getPendingUsers,
@@ -21,7 +16,6 @@ export default function BackofficeHome() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [pending, setPending] = useState([]);
-  const [pendingReservations, setPendingReservations] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -34,14 +28,9 @@ export default function BackofficeHome() {
     setError("");
     setLoading(true);
     try {
-      const [all, pend, bookings] = await Promise.all([
-        getUsers(),
-        getPendingUsers(),
-        getManagedReservations("Pending").catch(() => []),
-      ]);
+      const [all, pend] = await Promise.all([getUsers(), getPendingUsers()]);
       setUsers(all || []);
       setPending(pend || []);
-      setPendingReservations(bookings || []);
     } catch (err) {
       setError(err.message || "Failed to load users");
     } finally {
@@ -57,15 +46,18 @@ export default function BackofficeHome() {
     const active = users.filter((u) => u.status === "Active").length;
     const deactivated = users.filter((u) => u.status === "Deactivated").length;
     const prosumers = users.filter((u) => u.role === "Prosumer").length;
+    const staff = users.filter(
+      (u) => u.role === "Backoffice" || u.role === "GridOperator",
+    ).length;
     return {
       total: users.length,
       pending: pending.length,
-      pendingBookings: pendingReservations.length,
       active,
       deactivated,
       prosumers,
+      staff,
     };
-  }, [users, pending, pendingReservations]);
+  }, [users, pending]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -96,19 +88,8 @@ export default function BackofficeHome() {
     }
   }
 
-  function onRejectBooking(reservation) {
-    const reason = window.prompt("Rejection reason:", "");
-    if (reason === null || !reason.trim()) return;
-    runAction(
-      reservation.id,
-      () => rejectReservation(reservation.id, reason.trim()),
-      `Rejected ${reservation.reservationCode || reservation.id}`,
-    );
-  }
-
   return (
     <div className="space-y-8">
-      {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border border-grid-800/10 shadow-lg shadow-grid-900/10">
         <div className="absolute inset-0">
           <img
@@ -122,24 +103,20 @@ export default function BackofficeHome() {
         <div className="relative z-10 flex flex-col gap-6 px-6 py-10 sm:px-10 sm:py-12 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-grid-100/70">
-              Backoffice console
+              Backoffice
             </p>
             <h1 className="mt-3 font-display text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              User & booking administration
+              Welcome, {user.fullName.split(" ")[0]}
             </h1>
             <p className="mt-3 max-w-xl text-sm leading-relaxed text-grid-100/85 sm:text-base">
-              Approve pending prosumers, review energy reservations, manage
-              staff, and control activation across the GridSync network.
+              Approve prosumer registrations, manage staff accounts, and
+              administer the GridSync user directory. Stations and schedules
+              live under Stations; power trading bookings are handled by Grid
+              Operators.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Link
-              to="/backoffice/reservations"
-              className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
-            >
-              Approve reservations
-            </Link>
             <Link
               to="/stations"
               className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
@@ -150,23 +127,18 @@ export default function BackofficeHome() {
               to="/backoffice/staff/new"
               className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-grid-800 shadow-lg transition hover:bg-grid-50"
             >
-              Create staff user
+              Create staff
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Stats */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total users" value={stats.total} />
-        <StatCard label="Pending users" value={stats.pending} accent />
-        <StatCard
-          label="Pending bookings"
-          value={stats.pendingBookings}
-          accent
-        />
+        <StatCard label="Pending approvals" value={stats.pending} accent />
         <StatCard label="Active accounts" value={stats.active} />
         <StatCard label="Prosumers" value={stats.prosumers} />
+        <StatCard label="Staff accounts" value={stats.staff} />
       </section>
 
       {error ? (
@@ -180,102 +152,14 @@ export default function BackofficeHome() {
         </div>
       ) : null}
 
-      {/* Pending energy reservations */}
-      <section className="overflow-hidden rounded-2xl border border-teal-200/80 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 bg-teal-50/80 px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-teal-950">
-              Pending energy reservations
-            </h2>
-            <p className="text-sm text-teal-900/70">
-              Prosumer Charging / Drop-off bookings waiting for approval. QR is
-              issued on approve.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-teal-200/80 px-3 py-1 text-xs font-semibold text-teal-950">
-              {pendingReservations.length} waiting
-            </span>
-            <Link
-              to="/backoffice/reservations"
-              className="text-sm font-semibold text-teal-800 hover:underline"
-            >
-              View all →
-            </Link>
-          </div>
-        </div>
-
-        <div className="p-5">
-          {loading ? (
-            <p className="text-sm text-slate-500">Loading bookings…</p>
-          ) : pendingReservations.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-              No pending energy reservations right now.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingReservations.slice(0, 5).map((reservation) => (
-                <article
-                  key={reservation.id}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      {reservation.reservationCode || reservation.id}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {reservation.stationName || "Station"} · NIC{" "}
-                      {reservation.prosumerNic || "—"} ·{" "}
-                      {reservation.reservationType === "DropOff"
-                        ? "Drop-off"
-                        : reservation.reservationType}{" "}
-                      · {reservation.energyKwh} kWh
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {formatBookingDate(reservation.slotStart)} –{" "}
-                      {formatBookingDate(reservation.slotEnd)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busyId === reservation.id}
-                      className="rounded-lg bg-grid-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-grid-800 disabled:opacity-60"
-                      onClick={() =>
-                        runAction(
-                          reservation.id,
-                          () => approveReservation(reservation.id),
-                          `Approved ${reservation.reservationCode || reservation.id}`,
-                        )
-                      }
-                    >
-                      {busyId === reservation.id ? "…" : "Approve"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === reservation.id}
-                      className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
-                      onClick={() => onRejectBooking(reservation)}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Pending */}
       <section className="overflow-hidden rounded-2xl border border-amber-200/80 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-100 bg-amber-50/80 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-amber-950">
-              Pending activations
+              Pending prosumer activations
             </h2>
             <p className="text-sm text-amber-900/70">
-              Prosumer registrations waiting for Backoffice approval.
+              New prosumer registrations waiting for Backoffice approval.
             </p>
           </div>
           <span className="rounded-full bg-amber-200/80 px-3 py-1 text-xs font-semibold text-amber-950">
@@ -316,7 +200,11 @@ export default function BackofficeHome() {
                           disabled={busyId === u.id}
                           className="rounded-lg bg-grid-700 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-grid-800 disabled:opacity-60"
                           onClick={() =>
-                            runAction(u.id, () => approveUser(u.id), `Approved ${u.fullName}`)
+                            runAction(
+                              u.id,
+                              () => approveUser(u.id),
+                              `Approved ${u.fullName}`,
+                            )
                           }
                         >
                           {busyId === u.id ? "Approving…" : "Approve"}
@@ -331,7 +219,6 @@ export default function BackofficeHome() {
         </div>
       </section>
 
-      {/* All users */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -342,8 +229,11 @@ export default function BackofficeHome() {
               </p>
             </div>
             <p className="text-sm text-slate-500">
-              Showing <span className="font-semibold text-grid-800">{filteredUsers.length}</span> of{" "}
-              {users.length}
+              Showing{" "}
+              <span className="font-semibold text-grid-800">
+                {filteredUsers.length}
+              </span>{" "}
+              of {users.length}
             </p>
           </div>
 
@@ -362,7 +252,7 @@ export default function BackofficeHome() {
             >
               <option value="All">All roles</option>
               <option value="Backoffice">Backoffice</option>
-              <option value="GridOperator">GridOperator</option>
+              <option value="GridOperator">Grid Operator</option>
               <option value="Prosumer">Prosumer</option>
             </select>
             <select
@@ -399,18 +289,27 @@ export default function BackofficeHome() {
                 </thead>
                 <tbody>
                   {filteredUsers.map((u) => (
-                    <tr key={u.id} className="border-b border-slate-100 align-top last:border-0">
+                    <tr
+                      key={u.id}
+                      className="border-b border-slate-100 align-top last:border-0"
+                    >
                       <td className="py-3.5 pr-4">
                         <div className="flex items-center gap-3">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-grid-100 text-xs font-semibold text-grid-800">
                             {initials(u.fullName)}
                           </span>
                           <div>
-                            <p className="font-medium text-slate-900">{u.fullName}</p>
+                            <p className="font-medium text-slate-900">
+                              {u.fullName}
+                            </p>
                             {u.nic ? (
-                              <p className="text-xs text-slate-500">NIC {u.nic}</p>
+                              <p className="text-xs text-slate-500">
+                                NIC {u.nic}
+                              </p>
                             ) : (
-                              <p className="text-xs text-slate-400">Staff account</p>
+                              <p className="text-xs text-slate-400">
+                                Staff account
+                              </p>
                             )}
                           </div>
                         </div>
@@ -428,11 +327,14 @@ export default function BackofficeHome() {
                       </td>
                       <td className="py-3.5 pr-4">
                         <p className="text-slate-700">{u.email}</p>
-                        <p className="text-xs text-slate-500">{u.phone || "—"}</p>
+                        <p className="text-xs text-slate-500">
+                          {u.phone || "—"}
+                        </p>
                       </td>
                       <td className="py-3.5">
                         <div className="flex flex-wrap gap-2">
-                          {u.status !== "Deactivated" && u.id !== user.userId ? (
+                          {u.status !== "Deactivated" &&
+                          u.id !== user.userId ? (
                             <button
                               type="button"
                               disabled={busyId === u.id}
@@ -441,7 +343,7 @@ export default function BackofficeHome() {
                                 runAction(
                                   u.id,
                                   () => deactivateUser(u.id),
-                                  `Deactivated ${u.fullName}`
+                                  `Deactivated ${u.fullName}`,
                                 )
                               }
                             >
@@ -457,7 +359,7 @@ export default function BackofficeHome() {
                                 runAction(
                                   u.id,
                                   () => reactivateUser(u.id, user.userId),
-                                  `Reactivated ${u.fullName}`
+                                  `Reactivated ${u.fullName}`,
                                 )
                               }
                             >
@@ -465,7 +367,9 @@ export default function BackofficeHome() {
                             </button>
                           ) : null}
                           {u.id === user.userId ? (
-                            <span className="self-center text-xs text-slate-400">You</span>
+                            <span className="self-center text-xs text-slate-400">
+                              You
+                            </span>
                           ) : null}
                         </div>
                       </td>
@@ -485,15 +389,21 @@ function StatCard({ label, value, accent = false }) {
   return (
     <div
       className={`rounded-2xl border p-4 shadow-sm ${
-        accent
-          ? "border-amber-200 bg-amber-50"
-          : "border-slate-200 bg-white"
+        accent ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
       }`}
     >
-      <p className={`text-xs font-semibold uppercase tracking-wide ${accent ? "text-amber-800" : "text-slate-500"}`}>
+      <p
+        className={`text-xs font-semibold uppercase tracking-wide ${
+          accent ? "text-amber-800" : "text-slate-500"
+        }`}
+      >
         {label}
       </p>
-      <p className={`mt-2 text-3xl font-semibold tracking-tight ${accent ? "text-amber-950" : "text-grid-900"}`}>
+      <p
+        className={`mt-2 text-3xl font-semibold tracking-tight ${
+          accent ? "text-amber-950" : "text-grid-900"
+        }`}
+      >
         {value}
       </p>
     </div>
@@ -507,7 +417,11 @@ function StatusBadge({ status }) {
     Deactivated: "bg-slate-200 text-slate-700",
   };
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[status] || "bg-slate-100"}`}>
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        map[status] || "bg-slate-100"
+      }`}
+    >
       {status}
     </span>
   );
@@ -519,9 +433,14 @@ function RoleBadge({ role }) {
     GridOperator: "bg-emerald-700 text-white",
     Prosumer: "bg-grid-100 text-grid-800",
   };
+  const label = role === "GridOperator" ? "Grid Operator" : role;
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${map[role] || "bg-slate-100"}`}>
-      {role}
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        map[role] || "bg-slate-100"
+      }`}
+    >
+      {label}
     </span>
   );
 }
@@ -535,12 +454,4 @@ function initials(name = "") {
       .map((part) => part[0]?.toUpperCase() || "")
       .join("") || "U"
   );
-}
-
-function formatBookingDate(value) {
-  if (!value) return "Unknown";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
