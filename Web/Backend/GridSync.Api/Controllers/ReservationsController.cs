@@ -31,7 +31,7 @@ public class ReservationsController : ControllerBase
             return Unauthorized(new { message = "Authenticated user id is missing." });
         }
 
-        var staffAccess = User.IsInRole(UserRoles.Backoffice) || User.IsInRole(UserRoles.GridOperator);
+        var staffAccess = User.IsInRole(UserRoles.GridOperator);
         try
         {
             var reservation = await _reservationService.GetByIdAsync(userId, id, staffAccess);
@@ -85,7 +85,7 @@ public class ReservationsController : ControllerBase
     /// GET /api/reservations/manage?status=Pending
     /// </summary>
     [HttpGet("manage")]
-    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Manage([FromQuery] string? status)
     {
         var reservations = await _reservationService.GetForStaffAsync(status);
@@ -194,7 +194,7 @@ public class ReservationsController : ControllerBase
     /// POST /api/reservations/{id}/approve
     /// </summary>
     [HttpPost("{id}/approve")]
-    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Approve(string id)
     {
         return await Review(id, true, new ReviewReservationRequest());
@@ -204,7 +204,7 @@ public class ReservationsController : ControllerBase
     /// POST /api/reservations/{id}/reject
     /// </summary>
     [HttpPost("{id}/reject")]
-    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Reject(string id, [FromBody] ReviewReservationRequest request)
     {
         return await Review(id, false, request);
@@ -292,7 +292,7 @@ public class ReservationsController : ControllerBase
         if (string.IsNullOrWhiteSpace(userId))
             return Unauthorized(new { message = "Authenticated user id is missing." });
 
-        var staffAccess = User.IsInRole(UserRoles.Backoffice) || User.IsInRole(UserRoles.GridOperator);
+        var staffAccess = User.IsInRole(UserRoles.GridOperator);
         try
         {
             var results = await _reservationService.SearchAsync(

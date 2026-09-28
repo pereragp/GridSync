@@ -71,6 +71,7 @@ public class BookingSlotsController : ControllerBase
 
     /// <summary>POST /api/bookingslots/{id}/close — stop further bookings.</summary>
     [HttpPost("{id}/close")]
+    [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Close(string id)
     {
         try
@@ -89,6 +90,7 @@ public class BookingSlotsController : ControllerBase
 
     /// <summary>POST /api/bookingslots/{id}/reopen — allow bookings again.</summary>
     [HttpPost("{id}/reopen")]
+    [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Reopen(string id)
     {
         try

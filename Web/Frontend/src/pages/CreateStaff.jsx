@@ -9,12 +9,12 @@ const ROLES = [
   {
     value: "Backoffice",
     title: "Backoffice",
-    detail: "Full system administration, prosumer approvals, and account control.",
+    detail: "User administration, prosumer approvals, station registration, and schedules.",
   },
   {
     value: "GridOperator",
     title: "Grid Operator",
-    detail: "Operational access for stations, slots, bookings, and on-site verification.",
+    detail: "Battery availability, power trading bookings, and on-site QR transfers.",
   },
 ];
 

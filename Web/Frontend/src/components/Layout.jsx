@@ -5,14 +5,15 @@ import BrandLogo from './BrandLogo';
 export default function Layout() {
   const { user, logout, homePathFor } = useAuth();
   const year = new Date().getFullYear();
+  const isOperator = user.role === 'GridOperator';
+  const isBackoffice = user.role === 'Backoffice';
 
   return (
     <div className='flex min-h-dvh flex-col bg-grid-50 text-slate-900'>
-      {/* Top sustainability accent */}
       <div className='h-1 w-full bg-gradient-to-r from-grid-700 via-grid-500 to-emerald-400' />
 
       <header className='sticky top-0 z-30 border-b border-grid-100/90 bg-white/95 shadow-sm shadow-grid-900/5 backdrop-blur-md'>
-        <div className='mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3.5 sm:gap-10 sm:px-6'>
+        <div className='mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3.5 sm:gap-8 sm:px-6'>
           <div className='flex shrink-0 items-center gap-3'>
             <Link
               to={homePathFor(user.role)}
@@ -23,36 +24,49 @@ export default function Layout() {
             </Link>
           </div>
 
-          <nav className='ml-2 flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm sm:ml-4 sm:gap-1.5'>
+          <nav className='ml-2 flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm sm:ml-4 sm:gap-1'>
             {user.role === 'Backoffice' && (
               <>
-                <NavLink className={navClass} to='/backoffice'>
-                  Users
+                <NavLink className={navClass} to='/backoffice' end>
+                  <NavIconHome />
+                  Home
                 </NavLink>
-                <NavLink className={navClass} to='/backoffice/reservations'>
-                  Reservations
-                </NavLink>
-                <NavLink className={navClass} to="/stations">
+                <NavLink className={navClass} to='/stations'>
+                  <NavIconStations />
                   Stations
                 </NavLink>
                 <NavLink className={navClass} to='/backoffice/staff/new'>
-                  Create staff
+                  <NavIconStaff />
+                  Staff
+                </NavLink>
+                <NavLink className={navClass} to='/profile'>
+                  <NavIconProfile />
+                  Profile
                 </NavLink>
               </>
             )}
-            {user.role === 'GridOperator' && (
+
+            {isOperator && (
               <>
-                <NavLink className={navClass} to='/operator'>
+                <NavLink className={navClass} to='/operator' end>
+                  <NavIconHome />
                   Home
                 </NavLink>
-                <NavLink className={navClass} to='/operator/reservations'>
-                  Reservations
+                <NavLink className={navClass} to='/stations'>
+                  <NavIconStations />
+                  Stations
                 </NavLink>
                 <NavLink className={navClass} to='/operator/qr-scanner'>
+                  <NavIconQr />
                   Verify QR
+                </NavLink>
+                <NavLink className={navClass} to='/profile'>
+                  <NavIconProfile />
+                  Profile
                 </NavLink>
               </>
             )}
+
             {user.role === 'Prosumer' && (
               <>
                 <NavLink className={navClass} to='/prosumer'>
@@ -61,17 +75,17 @@ export default function Layout() {
                 <NavLink className={navClass} to='/reservations'>
                   Reservations
                 </NavLink>
-                <NavLink className={navClass} to="/stations">
+                <NavLink className={navClass} to='/stations'>
                   Stations
+                </NavLink>
+                <NavLink className={navClass} to='/profile'>
+                  Profile
+                </NavLink>
+                <NavLink className={navClass} to='/change-password'>
+                  Password
                 </NavLink>
               </>
             )}
-            <NavLink className={navClass} to='/profile'>
-              Profile
-            </NavLink>
-            <NavLink className={navClass} to='/change-password'>
-              Password
-            </NavLink>
           </nav>
 
           <div className='ml-auto flex shrink-0 items-center gap-2'>
@@ -84,7 +98,7 @@ export default function Layout() {
                   {user.fullName}
                 </p>
                 <p className='text-[10px] font-medium uppercase tracking-wide text-grid-600'>
-                  {user.role}
+                  {user.role === 'GridOperator' ? 'Grid Operator' : user.role}
                 </p>
               </div>
             </div>
@@ -121,21 +135,71 @@ export default function Layout() {
               Workspace
             </p>
             <ul className='mt-3 space-y-2 text-sm text-grid-100/80'>
-              <li>
-                <Link className='hover:text-white' to={homePathFor(user.role)}>
-                  Dashboard
-                </Link>
-              </li>
-              <li>
-                <Link className='hover:text-white' to='/profile'>
-                  Profile
-                </Link>
-              </li>
-              <li>
-                <Link className='hover:text-white' to='/change-password'>
-                  Security
-                </Link>
-              </li>
+              {isOperator ? (
+                <>
+                  <li>
+                    <Link className='hover:text-white' to='/operator'>
+                      Home
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/stations'>
+                      Stations
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/operator/qr-scanner'>
+                      Verify QR
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/profile'>
+                      Profile
+                    </Link>
+                  </li>
+                </>
+              ) : isBackoffice ? (
+                <>
+                  <li>
+                    <Link className='hover:text-white' to='/backoffice'>
+                      Home
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/stations'>
+                      Stations
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/backoffice/staff/new'>
+                      Staff
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/profile'>
+                      Profile
+                    </Link>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    <Link className='hover:text-white' to={homePathFor(user.role)}>
+                      Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/profile'>
+                      Profile
+                    </Link>
+                  </li>
+                  <li>
+                    <Link className='hover:text-white' to='/change-password'>
+                      Security
+                    </Link>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -148,7 +212,10 @@ export default function Layout() {
                 Signed in as <span className='text-white'>{user.email}</span>
               </li>
               <li>
-                Role · <span className='text-white'>{user.role}</span>
+                Role ·{' '}
+                <span className='text-white'>
+                  {user.role === 'GridOperator' ? 'Grid Operator' : user.role}
+                </span>
               </li>
               <li>JWT-secured console</li>
             </ul>
@@ -201,9 +268,57 @@ function LogoutIcon() {
 
 function navClass({ isActive }) {
   return [
-    'rounded-lg px-2.5 py-1.5 transition',
+    'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition',
     isActive
       ? 'bg-grid-100 font-semibold text-grid-800'
       : 'text-slate-600 hover:bg-grid-50 hover:text-grid-800',
   ].join(' ');
+}
+
+function NavIconHome() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path d='M10.707 2.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 10.707V17a1 1 0 001 1h4a1 1 0 001-1v-3a1 1 0 011-1h2a1 1 0 011 1v3a1 1 0 001 1h4a1 1 0 001-1v-6.293a1 1 0 00.293-.707l-7-7z' />
+    </svg>
+  );
+}
+
+function NavIconStations() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path d='M3.5 3A1.5 1.5 0 002 4.5v3A1.5 1.5 0 003.5 9h3A1.5 1.5 0 008 7.5v-3A1.5 1.5 0 006.5 3h-3zM12.5 3A1.5 1.5 0 0011 4.5v3A1.5 1.5 0 0012.5 9h3A1.5 1.5 0 0017 7.5v-3A1.5 1.5 0 0015.5 3h-3zM3.5 11A1.5 1.5 0 002 12.5v3A1.5 1.5 0 003.5 17h3A1.5 1.5 0 008 15.5v-3A1.5 1.5 0 006.5 11h-3zM12.5 11a1.5 1.5 0 00-1.5 1.5v3a1.5 1.5 0 001.5 1.5h3a1.5 1.5 0 001.5-1.5v-3a1.5 1.5 0 00-1.5-1.5h-3z' />
+    </svg>
+  );
+}
+
+function NavIconStaff() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path d='M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z' />
+    </svg>
+  );
+}
+
+function NavIconQr() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path
+        fillRule='evenodd'
+        d='M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 1v2h2V5H5zm8-2a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V4a1 1 0 00-1-1h-4zm1 2v2h2V5h-2zM3 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm2 1v2h2v-2H5zm9-1a1 1 0 00-1 1v1h1v1h-1v1a1 1 0 001 1h1v-1h1v1h1a1 1 0 001-1v-1h-1v-1h1v-1a1 1 0 00-1-1h-1v1h-1v-1h-1z'
+        clipRule='evenodd'
+      />
+    </svg>
+  );
+}
+
+function NavIconProfile() {
+  return (
+    <svg viewBox='0 0 20 20' fill='currentColor' className='h-3.5 w-3.5' aria-hidden>
+      <path
+        fillRule='evenodd'
+        d='M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z'
+        clipRule='evenodd'
+      />
+    </svg>
+  );
 }

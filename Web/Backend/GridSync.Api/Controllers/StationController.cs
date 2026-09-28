@@ -103,10 +103,10 @@ public class StationsController : ControllerBase
     }
 
     /// <summary>
-    /// PATCH /api/stations/{id}/schedule — Backoffice or GridOperator updates schedule + slots.
+    /// PATCH /api/stations/{id}/schedule — Backoffice updates schedule + slots.
     /// </summary>
     [HttpPatch("{id}/schedule")]
-    [Authorize(Roles = $"{UserRoles.Backoffice},{UserRoles.GridOperator}")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> UpdateSchedule(string id, [FromBody] UpdateStationScheduleRequest request)
     {
         try
