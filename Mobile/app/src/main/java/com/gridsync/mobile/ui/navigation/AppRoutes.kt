@@ -6,6 +6,8 @@ object AppRoutes {
     const val ProsumerDashboard = "prosumer_dashboard"
     const val StationDetail = "station/{stationId}"
     const val CreateReservation = "book/{stationId}"
+    const val MyBookings = "bookings"
+    const val BookingDetail = "bookings/{reservationId}"
 
     fun stationDetail(stationId: String) = "station/$stationId"
 
@@ -13,4 +15,6 @@ object AppRoutes {
         val id = stationId?.takeIf { it.isNotBlank() } ?: "none"
         return "book/$id"
     }
+
+    fun bookingDetail(reservationId: String) = "bookings/$reservationId"
 }

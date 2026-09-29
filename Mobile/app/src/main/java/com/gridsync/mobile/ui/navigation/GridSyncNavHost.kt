@@ -8,6 +8,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.gridsync.mobile.ui.screens.bookings.BookingDetailScreen
+import com.gridsync.mobile.ui.screens.bookings.MyBookingsScreen
 import com.gridsync.mobile.ui.screens.dashboard.ProsumerDashboardScreen
 import com.gridsync.mobile.ui.screens.login.LoginScreen
 import com.gridsync.mobile.ui.screens.register.RegisterScreen
@@ -52,8 +54,8 @@ fun GridSyncNavHost(
                 onBookEnergy = {
                     navController.navigate(AppRoutes.createReservation())
                 },
-                onBrowseStations = {
-                    // Nearby list is already on the dashboard — no-op for now
+                onMyBookings = {
+                    navController.navigate(AppRoutes.MyBookings)
                 },
                 onStationClick = { station ->
                     navController.navigate(AppRoutes.stationDetail(station.id))
@@ -88,10 +90,31 @@ fun GridSyncNavHost(
                 initialStationId = stationId,
                 onBack = { navController.popBackStack() },
                 onSuccess = {
-                    navController.navigate(AppRoutes.ProsumerDashboard) {
-                        popUpTo(AppRoutes.ProsumerDashboard) { inclusive = true }
+                    navController.navigate(AppRoutes.MyBookings) {
+                        popUpTo(AppRoutes.ProsumerDashboard)
                     }
                 },
+            )
+        }
+        composable(AppRoutes.MyBookings) {
+            MyBookingsScreen(
+                onBack = { navController.popBackStack() },
+                onBookingClick = { reservation ->
+                    navController.navigate(AppRoutes.bookingDetail(reservation.id))
+                },
+                onCreateBooking = {
+                    navController.navigate(AppRoutes.createReservation())
+                },
+            )
+        }
+        composable(
+            route = AppRoutes.BookingDetail,
+            arguments = listOf(navArgument("reservationId") { type = NavType.StringType }),
+        ) { entry ->
+            val reservationId = entry.arguments?.getString("reservationId").orEmpty()
+            BookingDetailScreen(
+                reservationId = reservationId,
+                onBack = { navController.popBackStack() },
             )
         }
     }

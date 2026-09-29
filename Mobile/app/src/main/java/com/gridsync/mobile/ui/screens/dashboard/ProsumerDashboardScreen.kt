@@ -50,6 +50,7 @@ import coil.compose.AsyncImage
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
+import com.gridsync.mobile.ui.data.MockReservationRepository
 import com.gridsync.mobile.ui.data.MockStationRepository
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
@@ -93,11 +94,11 @@ private val MockNearbyStations = MockStationRepository.stations.map { station ->
 @Composable
 fun ProsumerDashboardScreen(
     userName: String = "Prosumer",
-    pendingCount: Int = 2,
-    activeCount: Int = 1,
+    pendingCount: Int = MockReservationRepository.pendingCount(),
+    activeCount: Int = MockReservationRepository.approvedCount(),
     nearbyStations: List<NearbyStationUi> = MockNearbyStations,
     onBookEnergy: () -> Unit = {},
-    onBrowseStations: () -> Unit = {},
+    onMyBookings: () -> Unit = {},
     onStationClick: (NearbyStationUi) -> Unit = {},
     onSignOut: () -> Unit = {},
 ) {
@@ -114,24 +115,41 @@ fun ProsumerDashboardScreen(
             DashboardHero(
                 firstName = firstName,
                 onBookEnergy = onBookEnergy,
-                onBrowseStations = onBrowseStations,
+                onMyBookings = onMyBookings,
                 onSignOut = onSignOut,
             )
         }
 
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) {
-                Text(
-                    text = "Your activity",
-                    color = Grid900,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Live counts from your open energy reservations.",
-                    color = Slate600,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Your activity",
+                            color = Grid900,
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Live counts from your open energy reservations.",
+                            color = Slate600,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Text(
+                        text = "View all →",
+                        color = Grid700,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onMyBookings)
+                            .padding(4.dp),
+                    )
+                }
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -141,13 +159,17 @@ fun ProsumerDashboardScreen(
                         label = "Pending",
                         value = pendingCount.toString(),
                         hint = "Awaiting review",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onMyBookings),
                     )
                     StatCard(
                         label = "Active",
                         value = activeCount.toString(),
                         hint = "Approved bookings",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onMyBookings),
                     )
                 }
             }
@@ -207,7 +229,7 @@ fun ProsumerDashboardScreen(
 private fun DashboardHero(
     firstName: String,
     onBookEnergy: () -> Unit,
-    onBrowseStations: () -> Unit,
+    onMyBookings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Box(
@@ -300,12 +322,12 @@ private fun DashboardHero(
                         Text("Book energy", style = MaterialTheme.typography.labelLarge)
                     }
                     OutlinedButton(
-                        onClick = onBrowseStations,
+                        onClick = onMyBookings,
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                     ) {
-                        Text("Browse stations", style = MaterialTheme.typography.labelLarge)
+                        Text("My bookings", style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
