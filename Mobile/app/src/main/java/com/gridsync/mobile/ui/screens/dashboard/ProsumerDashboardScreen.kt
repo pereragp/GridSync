@@ -50,6 +50,7 @@ import coil.compose.AsyncImage
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
+import com.gridsync.mobile.ui.data.MockStationRepository
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
 import com.gridsync.mobile.ui.theme.Grid500
@@ -76,48 +77,18 @@ data class NearbyStationUi(
     val mapY: Float,
 )
 
-private val MockNearbyStations = listOf(
+private val MockNearbyStations = MockStationRepository.stations.map { station ->
     NearbyStationUi(
-        id = "1",
-        name = "Colombo Fort Hub",
-        code = "SGH-CFT001",
-        distanceKm = 1.2,
-        availableSlots = 6,
-        status = "Active",
-        mapX = 0.42f,
-        mapY = 0.48f,
-    ),
-    NearbyStationUi(
-        id = "2",
-        name = "Bambalapitiya Node",
-        code = "SGH-BAM014",
-        distanceKm = 2.8,
-        availableSlots = 3,
-        status = "Active",
-        mapX = 0.58f,
-        mapY = 0.62f,
-    ),
-    NearbyStationUi(
-        id = "3",
-        name = "Nugegoda Microgrid",
-        code = "SGH-NUG022",
-        distanceKm = 4.5,
-        availableSlots = 9,
-        status = "Active",
-        mapX = 0.70f,
-        mapY = 0.38f,
-    ),
-    NearbyStationUi(
-        id = "4",
-        name = "Dehiwala Battery Park",
-        code = "SGH-DEH008",
-        distanceKm = 6.1,
-        availableSlots = 2,
-        status = "Active",
-        mapX = 0.30f,
-        mapY = 0.72f,
-    ),
-)
+        id = station.id,
+        name = station.name,
+        code = station.code,
+        distanceKm = station.distanceKm,
+        availableSlots = station.availableBatterySlots,
+        status = station.status,
+        mapX = station.mapX,
+        mapY = station.mapY,
+    )
+}
 
 @Composable
 fun ProsumerDashboardScreen(
