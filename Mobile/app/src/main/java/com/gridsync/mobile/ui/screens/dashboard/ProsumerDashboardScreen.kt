@@ -100,7 +100,6 @@ fun ProsumerDashboardScreen(
     onBookEnergy: () -> Unit = {},
     onMyBookings: () -> Unit = {},
     onStationClick: (NearbyStationUi) -> Unit = {},
-    onSignOut: () -> Unit = {},
 ) {
     var selectedStationId by remember { mutableStateOf(nearbyStations.firstOrNull()?.id) }
     val firstName = userName.trim().split(" ").firstOrNull().orEmpty().ifBlank { "there" }
@@ -116,7 +115,6 @@ fun ProsumerDashboardScreen(
                 firstName = firstName,
                 onBookEnergy = onBookEnergy,
                 onMyBookings = onMyBookings,
-                onSignOut = onSignOut,
             )
         }
 
@@ -230,7 +228,6 @@ private fun DashboardHero(
     firstName: String,
     onBookEnergy: () -> Unit,
     onMyBookings: () -> Unit,
-    onSignOut: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -277,22 +274,7 @@ private fun DashboardHero(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BrandLogo(variant = BrandLogoVariant.Header)
-                Text(
-                    text = "Sign out",
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onSignOut)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                )
-            }
+            BrandLogo(variant = BrandLogoVariant.Header)
 
             Column {
                 Text(

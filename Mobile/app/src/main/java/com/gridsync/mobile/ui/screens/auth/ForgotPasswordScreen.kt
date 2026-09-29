@@ -1,5 +1,6 @@
-package com.gridsync.mobile.ui.screens.login
+package com.gridsync.mobile.ui.screens.auth
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,7 +17,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,10 +29,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,10 +46,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
@@ -54,6 +56,7 @@ import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
 import com.gridsync.mobile.ui.theme.ErrorRed800
 import com.gridsync.mobile.ui.theme.Grid100
+import com.gridsync.mobile.ui.theme.Grid50
 import com.gridsync.mobile.ui.theme.Grid600
 import com.gridsync.mobile.ui.theme.Grid700
 import com.gridsync.mobile.ui.theme.Grid900
@@ -68,30 +71,28 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(
-    onForgotPassword: () -> Unit = {},
-    onRegister: () -> Unit = {},
-    onLoginSuccess: () -> Unit = {},
+fun ForgotPasswordScreen(
+    onBackToLogin: () -> Unit = {},
+    onContinueToReset: (email: String) -> Unit = {},
 ) {
     var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun submit() {
         error = null
-        if (email.isBlank() || password.isBlank()) {
-            error = "Email and password are required"
+        if (email.isBlank() || !email.contains("@")) {
+            error = "Enter a valid account email"
             return
         }
         loading = true
-        // Frontend-only stub — wire to API later
+        // Frontend-only stub — wire to POST /api/auth/forgot-password later
         scope.launch {
-            delay(800)
+            delay(900)
             loading = false
-            onLoginSuccess()
+            success = true
         }
     }
 
@@ -114,24 +115,22 @@ fun LoginScreen(
         ) {
             BrandColumn()
             Spacer(modifier = Modifier.height(24.dp))
-            SignInCard(
+            RecoveryCard(
                 email = email,
                 onEmailChange = {
                     email = it
                     error = null
                 },
-                password = password,
-                onPasswordChange = {
-                    password = it
+                error = error,
+                success = success,
+                loading = loading,
+                onSubmit = ::submit,
+                onBackToLogin = onBackToLogin,
+                onContinueToReset = { onContinueToReset(email.trim()) },
+                onTryAgain = {
+                    success = false
                     error = null
                 },
-                showPassword = showPassword,
-                onToggleShowPassword = { showPassword = !showPassword },
-                error = error,
-                loading = loading,
-                onForgotPassword = onForgotPassword,
-                onRegister = onRegister,
-                onSubmit = ::submit,
             )
         }
     }
@@ -143,7 +142,7 @@ private fun BrandColumn() {
         BrandLogo(variant = BrandLogoVariant.Auth)
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "Power trading, synchronized for a cleaner grid.",
+            text = "Regain access in a few steps.",
             color = Color.White,
             style = MaterialTheme.typography.displayMedium.copy(
                 fontFamily = SourceSerifFontFamily,
@@ -152,7 +151,39 @@ private fun BrandColumn() {
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Sign in to manage microgrid nodes, energy slots, and prosumer reservations.",
+            text = "Enter the email on your GridSync account. We will send a secure reset link so you can choose a new password.",
+            color = Grid100.copy(alpha = 0.85f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        StepRow(1, "Enter your account email")
+        Spacer(modifier = Modifier.height(8.dp))
+        StepRow(2, "Open the reset link from your inbox")
+        Spacer(modifier = Modifier.height(8.dp))
+        StepRow(3, "Choose a new password and sign in")
+    }
+}
+
+@Composable
+private fun StepRow(number: Int, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(Grid100.copy(alpha = 0.2f))
+                .border(1.dp, Grid100.copy(alpha = 0.35f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = number.toString(),
+                color = Grid100,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = text,
             color = Grid100.copy(alpha = 0.85f),
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -160,18 +191,16 @@ private fun BrandColumn() {
 }
 
 @Composable
-private fun SignInCard(
+private fun RecoveryCard(
     email: String,
     onEmailChange: (String) -> Unit,
-    password: String,
-    onPasswordChange: (String) -> Unit,
-    showPassword: Boolean,
-    onToggleShowPassword: () -> Unit,
     error: String?,
+    success: Boolean,
     loading: Boolean,
-    onForgotPassword: () -> Unit,
-    onRegister: () -> Unit,
     onSubmit: () -> Unit,
+    onBackToLogin: () -> Unit,
+    onContinueToReset: () -> Unit,
+    onTryAgain: () -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -193,13 +222,22 @@ private fun SignInCard(
             .padding(24.dp)
     ) {
         Text(
-            text = "Welcome back",
+            text = "ACCOUNT RECOVERY",
+            color = Grid600,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp,
+            ),
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Forgot password",
             color = Grid900,
             style = MaterialTheme.typography.headlineMedium,
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Use your GridSync credentials to continue.",
+            text = "We will email a reset link when mail is configured on the API.",
             color = Slate600,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -219,147 +257,138 @@ private fun SignInCard(
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        FieldLabel("Email")
-        Spacer(modifier = Modifier.height(6.dp))
-        OutlinedTextField(
-            value = email,
-            onValueChange = onEmailChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = {
-                Text("you@gridsync.local", color = Slate600.copy(alpha = 0.7f))
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next,
-            ),
-            shape = RoundedCornerShape(8.dp),
-            colors = fieldColors,
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        FieldLabel("Password")
-        Spacer(modifier = Modifier.height(6.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = onPasswordChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = {
-                Text("Enter your password", color = Slate600.copy(alpha = 0.7f))
-            },
-            visualTransformation = if (showPassword) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-            trailingIcon = {
-                TextButton(onClick = onToggleShowPassword) {
-                    Text(
-                        text = if (showPassword) "Hide" else "Show",
-                        color = Grid700,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
+        if (success) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Grid50)
+                    .border(1.dp, Color(0xFFC6E6D2), RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Check your inbox",
+                    color = Grid900,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "If an account exists for $email, a password reset link has been sent. (UI stub — API wiring comes next.)",
+                    color = Grid700,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                Button(
+                    onClick = onContinueToReset,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Grid700,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text("Continue to reset", style = MaterialTheme.typography.labelLarge)
                 }
-            },
-            shape = RoundedCornerShape(8.dp),
-            colors = fieldColors,
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onTryAgain,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Slate300),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate700),
+                ) {
+                    Text("Use a different email", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        } else {
+            Spacer(modifier = Modifier.height(20.dp))
             Text(
-                text = "Forgot password?",
-                color = Grid700,
-                style = MaterialTheme.typography.bodyMedium.copy(
+                text = "Email",
+                color = Slate700,
+                style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = OutfitFontFamily,
                     fontWeight = FontWeight.Medium,
                 ),
-                modifier = Modifier.clickable(onClick = onForgotPassword),
             )
-        }
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = {
+                    Text("you@example.com", color = Slate600.copy(alpha = 0.7f))
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+                shape = RoundedCornerShape(8.dp),
+                colors = fieldColors,
+            )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = onSubmit,
-            enabled = !loading,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Grid700,
-                contentColor = Color.White,
-                disabledContainerColor = Grid700.copy(alpha = 0.6f),
-                disabledContentColor = Color.White,
-            ),
-        ) {
-            if (loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp,
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Text("Signing in…", style = MaterialTheme.typography.labelLarge)
-            } else {
-                Text("Sign in", style = MaterialTheme.typography.labelLarge)
+            Spacer(modifier = Modifier.height(18.dp))
+            Button(
+                onClick = onSubmit,
+                enabled = !loading,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Grid700,
+                    contentColor = Color.White,
+                    disabledContainerColor = Grid700.copy(alpha = 0.6f),
+                    disabledContentColor = Color.White,
+                ),
+            ) {
+                if (loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sending…", style = MaterialTheme.typography.labelLarge)
+                } else {
+                    Text("Send reset link", style = MaterialTheme.typography.labelLarge)
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
         HorizontalDivider(color = Color(0xFFE2E8F0))
         Spacer(modifier = Modifier.height(16.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "New prosumer? ",
+                text = "Remembered it? ",
                 color = Slate600,
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = "Register here",
+                text = "Back to sign in",
                 color = Grid700,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                modifier = Modifier.clickable(onClick = onRegister),
+                modifier = Modifier.clickable(onClick = onBackToLogin),
             )
         }
     }
 }
 
-@Composable
-private fun FieldLabel(text: String) {
-    Text(
-        text = text,
-        color = Slate700,
-        style = MaterialTheme.typography.titleMedium.copy(
-            fontFamily = OutfitFontFamily,
-            fontWeight = FontWeight.Medium,
-        ),
-    )
-}
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun LoginScreenPreview() {
+private fun ForgotPasswordPreview() {
     GridSyncMobileTheme {
-        LoginScreen()
+        ForgotPasswordScreen()
     }
 }

@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +59,7 @@ private enum class BookingsTab(val label: String) {
 
 @Composable
 fun MyBookingsScreen(
+    showBack: Boolean = true,
     initialTabHistory: Boolean = false,
     onBack: () -> Unit = {},
     onBookingClick: (MockReservation) -> Unit = {},
@@ -103,19 +103,20 @@ fun MyBookingsScreen(
             .fillMaxSize()
             .background(Grid50)
             .statusBarsPadding()
-            .navigationBarsPadding()
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            Text(
-                text = "← Back",
-                color = Grid700,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onBack)
-                    .padding(vertical = 4.dp),
-            )
-            Spacer(modifier = Modifier.height(10.dp))
+            if (showBack) {
+                Text(
+                    text = "← Back",
+                    color = Grid700,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onBack)
+                        .padding(vertical = 4.dp),
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
