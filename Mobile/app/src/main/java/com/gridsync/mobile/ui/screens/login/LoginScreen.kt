@@ -1,11 +1,5 @@
 package com.gridsync.mobile.ui.screens.login
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,10 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,7 +47,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
 import com.gridsync.mobile.ui.theme.ErrorRed200
@@ -65,7 +56,6 @@ import com.gridsync.mobile.ui.theme.ErrorRed800
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid600
 import com.gridsync.mobile.ui.theme.Grid700
-import com.gridsync.mobile.ui.theme.Grid800
 import com.gridsync.mobile.ui.theme.Grid900
 import com.gridsync.mobile.ui.theme.GridSyncMobileTheme
 import com.gridsync.mobile.ui.theme.OutfitFontFamily
@@ -76,9 +66,6 @@ import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val HERO_IMAGE_URL =
-    "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2000&q=80"
 
 @Composable
 fun LoginScreen(
@@ -113,7 +100,7 @@ fun LoginScreen(
             .fillMaxSize()
             .background(Grid900)
     ) {
-        HeroBackground()
+        AuthHeroBackground()
 
         Column(
             modifier = Modifier
@@ -147,58 +134,6 @@ fun LoginScreen(
                 onSubmit = ::submit,
             )
         }
-    }
-}
-
-@Composable
-private fun HeroBackground() {
-    val pan = rememberInfiniteTransition(label = "heroPan")
-    val scale by pan.animateFloat(
-        initialValue = 1.05f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 28_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "heroScale",
-    )
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        AsyncImage(
-            model = HERO_IMAGE_URL,
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .scale(scale),
-            contentScale = ContentScale.Crop,
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            Grid900.copy(alpha = 0.92f),
-                            Grid900.copy(alpha = 0.75f),
-                            Grid800.copy(alpha = 0.45f),
-                        )
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Grid900.copy(alpha = 0.30f),
-                            Color.Transparent,
-                            Grid900.copy(alpha = 0.80f),
-                        )
-                    )
-                )
-        )
     }
 }
 
@@ -264,7 +199,7 @@ private fun SignInCard(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Use your GridSync staff credentials to continue.",
+            text = "Use your GridSync credentials to continue.",
             color = Slate600,
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -374,9 +309,7 @@ private fun SignInCard(
         ) {
             if (loading) {
                 CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .padding(end = 0.dp),
+                    modifier = Modifier.size(18.dp),
                     color = Color.White,
                     strokeWidth = 2.dp,
                 )
@@ -397,7 +330,7 @@ private fun SignInCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Prosumer test account? ",
+                text = "New prosumer? ",
                 color = Slate600,
                 style = MaterialTheme.typography.bodyMedium,
             )

@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.gridsync.mobile.ui.screens.login.LoginScreen
+import com.gridsync.mobile.ui.navigation.GridSyncNavHost
 import com.gridsync.mobile.ui.theme.Grid900
 import com.gridsync.mobile.ui.theme.GridSyncMobileTheme
 
@@ -21,17 +21,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Grid900,
                 ) {
-                    LoginScreen(
-                        onForgotPassword = {
-                            // Wire navigation later
-                        },
-                        onRegister = {
-                            // Wire navigation later
-                        },
-                        onLoginSuccess = {
-                            // Wire auth + navigation later
-                        },
-                    )
+                    GridSyncNavHost()
                 }
             }
         }
