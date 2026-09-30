@@ -3,6 +3,8 @@ package com.gridsync.mobile.data.auth
 import com.gridsync.mobile.data.remote.ApiException
 import com.gridsync.mobile.data.remote.AuthApi
 import com.gridsync.mobile.data.remote.dto.LoginRequestDto
+import com.gridsync.mobile.data.remote.dto.RegisterProsumerRequestDto
+import com.gridsync.mobile.data.remote.dto.UserResponseDto
 import com.gridsync.mobile.data.remote.toUserMessage
 import com.gridsync.mobile.data.session.SessionStore
 import com.gridsync.mobile.data.session.UserSession
@@ -34,6 +36,34 @@ class AuthRepository(
             )
             sessionStore.save(session)
             return session
+        } catch (e: Exception) {
+            throw ApiException(e.toUserMessage())
+        }
+    }
+
+    /**
+     * Creates a Pending prosumer account. Does not sign the user in —
+     * Backoffice must approve before login works.
+     */
+    suspend fun registerProsumer(
+        nic: String,
+        fullName: String,
+        email: String,
+        phone: String,
+        password: String,
+        address: String?,
+    ): UserResponseDto {
+        try {
+            return authApi.registerProsumer(
+                RegisterProsumerRequestDto(
+                    nic = nic.trim(),
+                    fullName = fullName.trim(),
+                    email = email.trim(),
+                    phone = phone.trim(),
+                    password = password,
+                    address = address?.trim()?.takeIf { it.isNotEmpty() },
+                )
+            )
         } catch (e: Exception) {
             throw ApiException(e.toUserMessage())
         }

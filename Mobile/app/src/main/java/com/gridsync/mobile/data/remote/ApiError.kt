@@ -18,7 +18,8 @@ fun Throwable.toUserMessage(): String {
             parsed
                 ?: when (code()) {
                     401 -> "Invalid email or password."
-                    400 -> "Bad request."
+                    400 -> "Bad request. Check your details and try again."
+                    409 -> "This account already exists."
                     else -> "Request failed (${code()})"
                 }
         }

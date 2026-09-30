@@ -17,6 +17,26 @@ data class LoginResponseDto(
     val nic: String? = null,
 )
 
+data class RegisterProsumerRequestDto(
+    val nic: String,
+    val fullName: String,
+    val email: String,
+    val phone: String,
+    val password: String,
+    val address: String? = null,
+)
+
+data class UserResponseDto(
+    val id: String = "",
+    val nic: String? = null,
+    val fullName: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val role: String = "",
+    val status: String = "",
+    val address: String? = null,
+)
+
 data class ApiMessageDto(
     val message: String? = null,
 )
