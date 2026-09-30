@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -15,8 +17,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.gridsync.mobile.GridSyncApp
 import com.gridsync.mobile.ui.components.SystemBarsStyle
-import com.gridsync.mobile.ui.data.MockUserRepository
 import com.gridsync.mobile.ui.screens.auth.ForgotPasswordScreen
 import com.gridsync.mobile.ui.screens.auth.ResetPasswordScreen
 import com.gridsync.mobile.ui.screens.bookings.BookingDetailScreen
@@ -33,6 +35,10 @@ fun GridSyncNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+    val app = LocalContext.current.applicationContext as GridSyncApp
+    val startDestination = remember {
+        if (app.sessionStore.isLoggedIn) AppRoutes.ProsumerDashboard else AppRoutes.Login
+    }
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = bottomBarVisibleFor(currentRoute)
@@ -69,7 +75,7 @@ fun GridSyncNavHost(
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = AppRoutes.Login,
+            startDestination = startDestination,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
             composable(AppRoutes.Login) {
@@ -123,8 +129,9 @@ fun GridSyncNavHost(
                 )
             }
             composable(AppRoutes.ProsumerDashboard) {
+                val sessionName = app.sessionStore.getSession()?.fullName.orEmpty()
                 ProsumerDashboardScreen(
-                    userName = MockUserRepository.current().fullName,
+                    userName = sessionName.ifBlank { "Prosumer" },
                     onBookEnergy = {
                         navController.navigate(AppRoutes.createReservation())
                     },
@@ -197,6 +204,7 @@ fun GridSyncNavHost(
                         navigateToTab(navController, ProsumerTab.Home)
                     },
                     onSignOut = {
+                        app.authRepository.logoutLocal()
                         navController.navigate(AppRoutes.Login) {
                             popUpTo(0) { inclusive = true }
                         }
