@@ -28,6 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +62,7 @@ import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
 import com.gridsync.mobile.ui.theme.Grid600
 import com.gridsync.mobile.ui.theme.Grid700
+import com.gridsync.mobile.ui.theme.Grid800
 import com.gridsync.mobile.ui.theme.Grid900
 import com.gridsync.mobile.ui.theme.Slate300
 import com.gridsync.mobile.ui.theme.Slate600
@@ -81,12 +86,17 @@ private val StatusFilters = listOf(
 
 @Composable
 fun OperatorBookingsScreen(
+    initialStatus: String = "Pending",
+    successMessage: String = "",
     onBookingClick: (ReservationDto) -> Unit = {},
 ) {
     val app = LocalContext.current.applicationContext as GridSyncApp
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    var status by remember { mutableStateOf("Pending") }
+    var status by remember(initialStatus) {
+        mutableStateOf(initialStatus.ifBlank { "Pending" })
+    }
     var search by remember { mutableStateOf("") }
     var reservations by remember { mutableStateOf<List<ReservationDto>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -111,7 +121,18 @@ fun OperatorBookingsScreen(
         }
     }
 
+    LaunchedEffect(initialStatus) {
+        status = initialStatus.ifBlank { "Pending" }
+    }
+
     LaunchedEffect(status, reloadToken) { load() }
+
+    LaunchedEffect(successMessage) {
+        val text = successMessage.trim()
+        if (text.isNotBlank()) {
+            snackbarHostState.showSnackbar(text)
+        }
+    }
 
     val visible = remember(reservations, search) {
         val q = search.trim().lowercase()
@@ -132,10 +153,26 @@ fun OperatorBookingsScreen(
 
     val activeLabel = StatusFilters.firstOrNull { it.value == status }?.label ?: "Pending"
 
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Grid50),
+        containerColor = Grid50,
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = Grid800,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp),
+                )
+            }
+        },
+    ) { innerPadding ->
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Grid50)
+            .padding(innerPadding)
             .statusBarsPadding(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
@@ -335,6 +372,7 @@ fun OperatorBookingsScreen(
             },
         )
     }
+    } // Scaffold
 }
 
 @Composable

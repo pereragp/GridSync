@@ -17,7 +17,7 @@ object AppRoutes {
 
     // Grid Operator
     const val OperatorDashboard = "operator_dashboard"
-    const val OperatorBookings = "operator_bookings"
+    const val OperatorBookings = "operator_bookings?status={status}&successMessage={successMessage}"
     const val OperatorBookingDetail = "operator_bookings/{reservationId}"
     const val OperatorStations = "operator_stations"
     const val OperatorStationBatteries = "operator_stations/{stationId}/batteries"
@@ -32,6 +32,15 @@ object AppRoutes {
     }
 
     fun bookingDetail(reservationId: String) = "bookings/$reservationId"
+
+    fun operatorBookings(
+        status: String = "Pending",
+        successMessage: String = "",
+    ): String {
+        val encodedStatus = android.net.Uri.encode(status)
+        val encodedMessage = android.net.Uri.encode(successMessage)
+        return "operator_bookings?status=$encodedStatus&successMessage=$encodedMessage"
+    }
 
     fun operatorBookingDetail(reservationId: String) = "operator_bookings/$reservationId"
 
