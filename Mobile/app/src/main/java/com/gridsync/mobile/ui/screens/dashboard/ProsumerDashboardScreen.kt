@@ -1,13 +1,14 @@
 package com.gridsync.mobile.ui.screens.dashboard
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,35 +22,56 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.rememberMarkerState
+import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.data.location.LatLngPoint
+import com.gridsync.mobile.data.location.UserLocationProvider
+import com.gridsync.mobile.data.remote.dto.NearbyStationResponseDto
+import com.gridsync.mobile.data.station.StationRepository
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
+import com.gridsync.mobile.ui.data.MockReservationRepository
+import com.gridsync.mobile.ui.data.MockStationRepository
+import com.gridsync.mobile.ui.theme.ErrorRed200
+import com.gridsync.mobile.ui.theme.ErrorRed50
+import com.gridsync.mobile.ui.theme.ErrorRed800
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
 import com.gridsync.mobile.ui.theme.Grid500
@@ -63,6 +85,7 @@ import com.gridsync.mobile.ui.theme.Slate600
 import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
+import kotlinx.coroutines.launch
 
 data class NearbyStationUi(
     val id: String,
@@ -71,67 +94,118 @@ data class NearbyStationUi(
     val distanceKm: Double,
     val availableSlots: Int,
     val status: String,
-    /** Relative map pin position 0..1 */
-    val mapX: Float,
-    val mapY: Float,
+    val latitude: Double,
+    val longitude: Double,
 )
 
-private val MockNearbyStations = listOf(
+private val PreviewNearbyStations = MockStationRepository.stations.map { station ->
     NearbyStationUi(
-        id = "1",
-        name = "Colombo Fort Hub",
-        code = "SGH-CFT001",
-        distanceKm = 1.2,
-        availableSlots = 6,
-        status = "Active",
-        mapX = 0.42f,
-        mapY = 0.48f,
-    ),
-    NearbyStationUi(
-        id = "2",
-        name = "Bambalapitiya Node",
-        code = "SGH-BAM014",
-        distanceKm = 2.8,
-        availableSlots = 3,
-        status = "Active",
-        mapX = 0.58f,
-        mapY = 0.62f,
-    ),
-    NearbyStationUi(
-        id = "3",
-        name = "Nugegoda Microgrid",
-        code = "SGH-NUG022",
-        distanceKm = 4.5,
-        availableSlots = 9,
-        status = "Active",
-        mapX = 0.70f,
-        mapY = 0.38f,
-    ),
-    NearbyStationUi(
-        id = "4",
-        name = "Dehiwala Battery Park",
-        code = "SGH-DEH008",
-        distanceKm = 6.1,
-        availableSlots = 2,
-        status = "Active",
-        mapX = 0.30f,
-        mapY = 0.72f,
-    ),
+        id = station.id,
+        name = station.name,
+        code = station.code,
+        distanceKm = station.distanceKm,
+        availableSlots = station.availableBatterySlots,
+        status = station.status,
+        latitude = station.latitude,
+        longitude = station.longitude,
+    )
+}
+
+private fun NearbyStationResponseDto.toUi() = NearbyStationUi(
+    id = id,
+    name = name,
+    code = stationCode,
+    distanceKm = distanceKm,
+    availableSlots = availableBatterySlots,
+    status = status,
+    latitude = latitude,
+    longitude = longitude,
 )
 
 @Composable
 fun ProsumerDashboardScreen(
     userName: String = "Prosumer",
-    pendingCount: Int = 2,
-    activeCount: Int = 1,
-    nearbyStations: List<NearbyStationUi> = MockNearbyStations,
+    pendingCount: Int = MockReservationRepository.pendingCount(),
+    activeCount: Int = MockReservationRepository.approvedCount(),
     onBookEnergy: () -> Unit = {},
-    onBrowseStations: () -> Unit = {},
+    onMyBookings: () -> Unit = {},
     onStationClick: (NearbyStationUi) -> Unit = {},
-    onSignOut: () -> Unit = {},
 ) {
-    var selectedStationId by remember { mutableStateOf(nearbyStations.firstOrNull()?.id) }
+    val app = LocalContext.current.applicationContext as GridSyncApp
+    val scope = rememberCoroutineScope()
+
+    var nearbyStations by remember { mutableStateOf<List<NearbyStationUi>>(emptyList()) }
+    var userLocation by remember { mutableStateOf(UserLocationProvider.FALLBACK_COLOMBO) }
+    var locationPermissionGranted by remember {
+        mutableStateOf(app.userLocationProvider.hasLocationPermission())
+    }
+    var usingFallbackLocation by remember { mutableStateOf(false) }
+    var isLoadingNearby by remember { mutableStateOf(true) }
+    var nearbyError by remember { mutableStateOf<String?>(null) }
+    var selectedStationId by remember { mutableStateOf<String?>(null) }
+    var reloadToken by remember { mutableStateOf(0) }
+    var didRequestPermission by remember { mutableStateOf(false) }
+
+    fun loadNearby() {
+        scope.launch {
+            isLoadingNearby = true
+            nearbyError = null
+            try {
+                val resolved = app.userLocationProvider.resolve()
+                usingFallbackLocation = resolved.isFallback
+                userLocation = resolved.point
+                locationPermissionGranted = app.userLocationProvider.hasLocationPermission()
+
+                val stations = app.stationRepository.getNearby(
+                    latitude = resolved.point.latitude,
+                    longitude = resolved.point.longitude,
+                    radiusKm = StationRepository.DEFAULT_RADIUS_KM,
+                ).map { it.toUi() }
+
+                nearbyStations = stations
+                if (selectedStationId == null || stations.none { it.id == selectedStationId }) {
+                    selectedStationId = stations.firstOrNull()?.id
+                }
+            } catch (e: Exception) {
+                nearbyError = e.message ?: "Could not load nearby stations."
+                nearbyStations = emptyList()
+            } finally {
+                isLoadingNearby = false
+            }
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        locationPermissionGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        reloadToken += 1
+    }
+
+    LaunchedEffect(Unit) {
+        if (!app.userLocationProvider.hasLocationPermission() && !didRequestPermission) {
+            didRequestPermission = true
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                )
+            )
+        }
+    }
+
+    LaunchedEffect(reloadToken) {
+        loadNearby()
+    }
+
     val firstName = userName.trim().split(" ").firstOrNull().orEmpty().ifBlank { "there" }
+    val subtitle = when {
+        isLoadingNearby -> "Finding stations near you…"
+        nearbyError != null -> "Could not refresh nearby stations."
+        usingFallbackLocation -> "Showing stations near Colombo (enable location for GPS)."
+        else -> "Active hubs within ${StationRepository.DEFAULT_RADIUS_KM.toInt()} km of you."
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -143,24 +217,40 @@ fun ProsumerDashboardScreen(
             DashboardHero(
                 firstName = firstName,
                 onBookEnergy = onBookEnergy,
-                onBrowseStations = onBrowseStations,
-                onSignOut = onSignOut,
+                onMyBookings = onMyBookings,
             )
         }
 
         item {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) {
-                Text(
-                    text = "Your activity",
-                    color = Grid900,
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Live counts from your open energy reservations.",
-                    color = Slate600,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Your activity",
+                            color = Grid900,
+                            style = MaterialTheme.typography.headlineMedium,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Live counts from your open energy reservations.",
+                            color = Slate600,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    Text(
+                        text = "View all →",
+                        color = Grid700,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onMyBookings)
+                            .padding(4.dp),
+                    )
+                }
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -170,13 +260,17 @@ fun ProsumerDashboardScreen(
                         label = "Pending",
                         value = pendingCount.toString(),
                         hint = "Awaiting review",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onMyBookings),
                     )
                     StatCard(
                         label = "Active",
                         value = activeCount.toString(),
                         hint = "Approved bookings",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onMyBookings),
                     )
                 }
             }
@@ -197,24 +291,44 @@ fun ProsumerDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Mock map preview — GPS + API wiring comes next.",
-                            color = Slate600,
+                            text = subtitle,
+                            color = if (nearbyError != null) ErrorRed800 else Slate600,
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                     Text(
-                        text = "${nearbyStations.size} nearby",
+                        text = if (isLoadingNearby) "…" else "${nearbyStations.size} nearby",
                         color = Grid700,
                         style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = !isLoadingNearby) { reloadToken += 1 }
+                            .padding(4.dp),
                     )
                 }
                 Spacer(modifier = Modifier.height(14.dp))
-                NearbyMapPreview(
+                NearbyStationsMap(
                     stations = nearbyStations,
+                    userLocation = userLocation,
                     selectedStationId = selectedStationId,
+                    locationPermissionGranted = locationPermissionGranted,
+                    isLoading = isLoadingNearby,
+                    error = nearbyError,
                     onSelectStation = { selectedStationId = it.id },
+                    onRetry = { reloadToken += 1 },
                 )
                 Spacer(modifier = Modifier.height(14.dp))
+            }
+        }
+
+        if (!isLoadingNearby && nearbyError == null && nearbyStations.isEmpty()) {
+            item {
+                Text(
+                    text = "No active stations within ${StationRepository.DEFAULT_RADIUS_KM.toInt()} km. Try refreshing or widening your search area later.",
+                    color = Slate600,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
             }
         }
 
@@ -236,8 +350,7 @@ fun ProsumerDashboardScreen(
 private fun DashboardHero(
     firstName: String,
     onBookEnergy: () -> Unit,
-    onBrowseStations: () -> Unit,
-    onSignOut: () -> Unit,
+    onMyBookings: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -284,22 +397,7 @@ private fun DashboardHero(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BrandLogo(variant = BrandLogoVariant.Header)
-                Text(
-                    text = "Sign out",
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onSignOut)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                )
-            }
+            BrandLogo(variant = BrandLogoVariant.Header)
 
             Column {
                 Text(
@@ -329,12 +427,12 @@ private fun DashboardHero(
                         Text("Book energy", style = MaterialTheme.typography.labelLarge)
                     }
                     OutlinedButton(
-                        onClick = onBrowseStations,
+                        onClick = onMyBookings,
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                     ) {
-                        Text("Browse stations", style = MaterialTheme.typography.labelLarge)
+                        Text("My bookings", style = MaterialTheme.typography.labelLarge)
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -381,137 +479,140 @@ private fun StatCard(
 }
 
 @Composable
-private fun NearbyMapPreview(
+private fun NearbyStationsMap(
     stations: List<NearbyStationUi>,
+    userLocation: LatLngPoint,
     selectedStationId: String?,
+    locationPermissionGranted: Boolean,
+    isLoading: Boolean,
+    error: String?,
     onSelectStation: (NearbyStationUi) -> Unit,
+    onRetry: () -> Unit,
 ) {
+    val userLatLng = remember(userLocation) {
+        LatLng(userLocation.latitude, userLocation.longitude)
+    }
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(userLatLng, 12f)
+    }
+    // CameraUpdateFactory is only safe after the Maps SDK has loaded the map.
+    var mapReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(mapReady, userLocation, stations, selectedStationId) {
+        if (!mapReady) return@LaunchedEffect
+
+        try {
+            val selected = stations.firstOrNull { it.id == selectedStationId }
+            if (selected != null) {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(selected.latitude, selected.longitude),
+                        13.5f,
+                    )
+                )
+                return@LaunchedEffect
+            }
+
+            if (stations.isEmpty()) {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngZoom(userLatLng, 12f)
+                )
+                return@LaunchedEffect
+            }
+
+            val bounds = LatLngBounds.builder().apply {
+                include(userLatLng)
+                stations.forEach { include(LatLng(it.latitude, it.longitude)) }
+            }.build()
+            cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, 80))
+        } catch (_: Exception) {
+            // Avoid crashing Home if camera animation races map init.
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 12f)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(220.dp)
+            .height(240.dp)
             .clip(RoundedCornerShape(16.dp))
             .border(1.dp, Grid100, RoundedCornerShape(16.dp))
     ) {
-        // Stylized map base — swap for Google Maps when API key is ready
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFD7E8DC),
-                        Color(0xFFB7D4C2),
-                        Color(0xFF9BC4AE),
-                    )
-                )
-            )
-            val roadColor = Color.White.copy(alpha = 0.55f)
-            drawPath(
-                path = Path().apply {
-                    moveTo(0f, size.height * 0.35f)
-                    cubicTo(
-                        size.width * 0.25f, size.height * 0.2f,
-                        size.width * 0.55f, size.height * 0.55f,
-                        size.width, size.height * 0.4f,
-                    )
-                },
-                color = roadColor,
-                style = Stroke(width = 10.dp.toPx()),
-            )
-            drawPath(
-                path = Path().apply {
-                    moveTo(size.width * 0.1f, size.height)
-                    cubicTo(
-                        size.width * 0.35f, size.height * 0.7f,
-                        size.width * 0.6f, size.height * 0.85f,
-                        size.width * 0.95f, size.height * 0.55f,
-                    )
-                },
-                color = roadColor,
-                style = Stroke(width = 7.dp.toPx()),
-            )
-            val grid = Color(0xFF0C3D25).copy(alpha = 0.06f)
-            for (i in 1..5) {
-                val x = size.width * i / 6f
-                val y = size.height * i / 6f
-                drawLine(grid, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
-                drawLine(grid, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
-            }
-            val you = Offset(size.width * 0.48f, size.height * 0.55f)
-            drawCircle(Color.White, radius = 10.dp.toPx(), center = you)
-            drawCircle(Grid500, radius = 6.dp.toPx(), center = you)
-            drawCircle(
-                color = Grid500.copy(alpha = 0.2f),
-                radius = 22.dp.toPx(),
-                center = you,
-            )
-        }
-
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(isMyLocationEnabled = locationPermissionGranted),
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = false,
+                myLocationButtonEnabled = locationPermissionGranted,
+                mapToolbarEnabled = false,
+                compassEnabled = false,
+            ),
+            onMapLoaded = { mapReady = true },
+        ) {
             stations.forEach { station ->
-                val selected = station.id == selectedStationId
-                val pinSize = if (selected) 28.dp else 22.dp
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(
-                            start = (maxWidth * station.mapX - pinSize / 2).coerceAtLeast(0.dp),
-                            top = (maxHeight * station.mapY - pinSize / 2).coerceAtLeast(0.dp),
-                        )
-                ) {
-                    MapPin(
-                        selected = selected,
-                        onClick = { onSelectStation(station) },
+                key(station.id) {
+                    val selected = station.id == selectedStationId
+                    val markerState = rememberMarkerState(
+                        position = LatLng(station.latitude, station.longitude),
+                    )
+                    Marker(
+                        state = markerState,
+                        title = station.name,
+                        snippet = String.format(
+                            "%.1f km · %d slots",
+                            station.distanceKm,
+                            station.availableSlots,
+                        ),
+                        zIndex = if (selected) 1f else 0f,
+                        onClick = {
+                            onSelectStation(station)
+                            false
+                        },
                     )
                 }
             }
         }
 
-        Text(
-            text = "YOU",
-            color = Grid800,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(top = 28.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = 0.9f))
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = Grid700, modifier = Modifier.size(28.dp))
+            }
+        }
 
-        Text(
-            text = "Map preview",
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(12.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Grid900.copy(alpha = 0.55f))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun MapPin(
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(if (selected) 28.dp else 22.dp)
-            .clip(CircleShape)
-            .background(if (selected) Grid700 else Color.White)
-            .border(2.dp, if (selected) Color.White else Grid700, CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(if (selected) Color.White else Grid700)
-        )
+        if (error != null && !isLoading) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(ErrorRed50)
+                    .border(1.dp, ErrorRed200, RoundedCornerShape(12.dp))
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = error,
+                    color = ErrorRed800,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Tap to retry",
+                    color = Grid700,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onRetry)
+                        .padding(4.dp),
+                )
+            }
+        }
     }
 }
 
@@ -592,6 +693,18 @@ private fun NearbyStationRow(
 @Composable
 private fun ProsumerDashboardPreview() {
     GridSyncMobileTheme {
-        ProsumerDashboardScreen(userName = "Ayesha Perera")
+        // Preview uses empty nearby state; map requires device Google Play services.
+        Column(Modifier.background(Grid50).padding(20.dp)) {
+            Text("Nearby preview stations", color = Grid900)
+            Spacer(Modifier.height(12.dp))
+            PreviewNearbyStations.take(2).forEach { station ->
+                NearbyStationRow(
+                    station = station,
+                    selected = station.id == "1",
+                    onClick = {},
+                    modifier = Modifier.padding(vertical = 5.dp),
+                )
+            }
+        }
     }
 }
