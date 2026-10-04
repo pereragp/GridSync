@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,15 +42,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.data.remote.dto.ReservationDto
 import com.gridsync.mobile.ui.components.MockQrCode
-import com.gridsync.mobile.ui.data.MockReservation
-import com.gridsync.mobile.ui.data.MockReservationRepository
-import com.gridsync.mobile.ui.data.MockReservationStatus
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
 import com.gridsync.mobile.ui.theme.ErrorRed800
@@ -63,7 +66,10 @@ import com.gridsync.mobile.ui.theme.Slate300
 import com.gridsync.mobile.ui.theme.Slate600
 import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
-import kotlinx.coroutines.delay
+import com.gridsync.mobile.ui.util.formatApiDateTime
+import com.gridsync.mobile.ui.util.formatApiDateTimeForEdit
+import com.gridsync.mobile.ui.util.localDateTimeToIsoUtc
+import com.gridsync.mobile.ui.util.reservationTypeLabel
 import kotlinx.coroutines.launch
 
 @Composable
@@ -71,60 +77,123 @@ fun BookingDetailScreen(
     reservationId: String,
     onBack: () -> Unit = {},
 ) {
-    var reservation by remember(reservationId) {
-        mutableStateOf(MockReservationRepository.findById(reservationId))
-    }
+    val context = LocalContext.current
+    val app = context.applicationContext as GridSyncApp
+    val scope = rememberCoroutineScope()
 
-    if (reservation == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Grid50)
-                .statusBarsPadding()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("Booking not found", color = Grid900, style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(onClick = onBack) {
-                Text("Go back")
+    var reservation by remember { mutableStateOf<ReservationDto?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+
+    fun load() {
+        scope.launch {
+            loading = true
+            loadError = null
+            try {
+                reservation = app.reservationRepository.getById(reservationId)
+            } catch (e: Exception) {
+                loadError = e.message ?: "Could not load booking"
+                reservation = null
+            } finally {
+                loading = false
             }
         }
-        return
     }
 
-    BookingDetailContent(
-        reservation = reservation!!,
-        onBack = onBack,
-        onUpdated = { reservation = it },
-    )
+    LaunchedEffect(reservationId) {
+        load()
+    }
+
+    when {
+        loading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Grid50)
+                    .statusBarsPadding(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = Grid700, strokeWidth = 2.dp)
+            }
+        }
+        reservation == null -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Grid50)
+                    .statusBarsPadding()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = loadError ?: "Booking not found",
+                    color = Grid900,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(onClick = onBack) {
+                    Text("Go back")
+                }
+                if (loadError != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { load() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Grid700,
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text("Retry")
+                    }
+                }
+            }
+        }
+        else -> {
+            BookingDetailContent(
+                reservation = reservation!!,
+                onBack = onBack,
+                onUpdated = { reservation = it },
+            )
+        }
+    }
 }
 
 @Composable
 private fun BookingDetailContent(
-    reservation: MockReservation,
+    reservation: ReservationDto,
     onBack: () -> Unit,
-    onUpdated: (MockReservation) -> Unit,
+    onUpdated: (ReservationDto) -> Unit,
 ) {
-    val editable = reservation.status == MockReservationStatus.Pending
+    val context = LocalContext.current
+    val app = context.applicationContext as GridSyncApp
+    val scope = rememberCoroutineScope()
+
+    val editable = reservation.status.equals("Pending", ignoreCase = true)
     val cancellable =
-        reservation.status == MockReservationStatus.Pending ||
-            reservation.status == MockReservationStatus.Approved
+        reservation.status.equals("Pending", ignoreCase = true) ||
+            reservation.status.equals("Approved", ignoreCase = true)
     val hasQr =
-        reservation.status == MockReservationStatus.Approved &&
+        reservation.status.equals("Approved", ignoreCase = true) &&
             !reservation.qrPayload.isNullOrBlank()
 
-    var type by remember(reservation.id) { mutableStateOf(reservation.reservationType) }
-    var energy by remember(reservation.id) { mutableStateOf(reservation.energyKwh.toString()) }
-    var start by remember(reservation.id) { mutableStateOf(reservation.slotStart) }
-    var end by remember(reservation.id) { mutableStateOf(reservation.slotEnd) }
-    var showQr by remember { mutableStateOf(hasQr) }
+    var type by remember(reservation.id, reservation.updatedAt) {
+        mutableStateOf(reservation.reservationType.ifBlank { "Charging" })
+    }
+    var energy by remember(reservation.id, reservation.updatedAt) {
+        mutableStateOf(reservation.energyKwh.toString())
+    }
+    var start by remember(reservation.id, reservation.updatedAt) {
+        mutableStateOf(formatApiDateTimeForEdit(reservation.slotStart))
+    }
+    var end by remember(reservation.id, reservation.updatedAt) {
+        mutableStateOf(formatApiDateTimeForEdit(reservation.slotEnd))
+    }
+    var showQr by remember(reservation.id, reservation.qrPayload) { mutableStateOf(hasQr) }
     var error by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var cancelling by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
 
     fun save() {
         error = null
@@ -135,22 +204,34 @@ private fun BookingDetailContent(
             energyValue == null || energyValue <= 0 -> error = "Enter a valid energy amount"
             start.isBlank() || end.isBlank() -> error = "Visit start and end are required"
             else -> {
+                val startIso = try {
+                    localDateTimeToIsoUtc(start)
+                } catch (e: IllegalArgumentException) {
+                    error = e.message
+                    return
+                }
+                val endIso = try {
+                    localDateTimeToIsoUtc(end)
+                } catch (e: IllegalArgumentException) {
+                    error = e.message
+                    return
+                }
                 saving = true
                 scope.launch {
-                    delay(700)
-                    val updated = MockReservationRepository.update(
-                        id = reservation.id,
-                        reservationType = type,
-                        energyKwh = energyValue,
-                        slotStart = start,
-                        slotEnd = end,
-                    )
-                    saving = false
-                    if (updated == null) {
-                        error = "Could not update this booking"
-                    } else {
-                        message = "Booking updated (mock). ≥12h notice applies on the API."
+                    try {
+                        val updated = app.reservationRepository.update(
+                            id = reservation.id,
+                            reservationType = type,
+                            energyKwh = energyValue,
+                            slotStartIso = startIso,
+                            slotEndIso = endIso,
+                        )
+                        message = "Booking updated."
                         onUpdated(updated)
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not update this booking"
+                    } finally {
+                        saving = false
                     }
                 }
             }
@@ -162,15 +243,15 @@ private fun BookingDetailContent(
         message = null
         cancelling = true
         scope.launch {
-            delay(700)
-            val updated = MockReservationRepository.cancel(reservation.id)
-            cancelling = false
-            if (updated == null) {
-                error = "Could not cancel this booking"
-            } else {
-                message = "Booking cancelled (mock)."
+            try {
+                val updated = app.reservationRepository.cancel(reservation.id)
+                message = "Booking cancelled."
                 showQr = false
                 onUpdated(updated)
+            } catch (e: Exception) {
+                error = e.message ?: "Could not cancel this booking"
+            } finally {
+                cancelling = false
             }
         }
     }
@@ -206,18 +287,18 @@ private fun BookingDetailContent(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = reservation.reservationCode,
+                        text = reservation.reservationCode.ifBlank { reservation.id },
                         color = Grid900,
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = reservation.stationName,
+                        text = reservation.stationName?.ifBlank { "Station" } ?: "Station",
                         color = Slate600,
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
-                StatusBadge(status = reservation.status)
+                ProsumerStatusBadge(status = reservation.status)
             }
 
             if (error != null) {
@@ -229,17 +310,38 @@ private fun BookingDetailContent(
                 Banner(text = message!!, error = false)
             }
 
+            if (!reservation.rejectionReason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Banner(text = "Rejected: ${reservation.rejectionReason}", error = true)
+            }
+            if (!reservation.cancellationReason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Banner(text = "Cancelled: ${reservation.cancellationReason}", error = false)
+            }
+
             Spacer(modifier = Modifier.height(18.dp))
             SectionCard {
-                InfoRow("Type", typeLabel(reservation.reservationType))
+                InfoRow("Type", reservationTypeLabel(reservation.reservationType))
                 DividerPad()
                 InfoRow("Energy", "${reservation.energyKwh} kWh")
                 DividerPad()
-                InfoRow("Battery", "#${reservation.batteryIndex}")
+                InfoRow("Status", reservation.status.ifBlank { "Unknown" })
                 DividerPad()
-                InfoRow("Visit start", reservation.slotStart)
+                InfoRow("Visit start", formatApiDateTime(reservation.slotStart))
                 DividerPad()
-                InfoRow("Visit end", reservation.slotEnd)
+                InfoRow("Visit end", formatApiDateTime(reservation.slotEnd))
+                if (!reservation.completedAt.isNullOrBlank()) {
+                    DividerPad()
+                    InfoRow("Completed", formatApiDateTime(reservation.completedAt))
+                }
+                if (!reservation.cancelledAt.isNullOrBlank()) {
+                    DividerPad()
+                    InfoRow("Cancelled", formatApiDateTime(reservation.cancelledAt))
+                }
+                if (!reservation.rejectedAt.isNullOrBlank()) {
+                    DividerPad()
+                    InfoRow("Rejected", formatApiDateTime(reservation.rejectedAt))
+                }
             }
 
             if (editable) {
@@ -254,7 +356,7 @@ private fun BookingDetailContent(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Pending bookings can be edited. API will enforce the 12-hour rule.",
+                    text = "Pending bookings can be edited. The API enforces the 12-hour notice rule.",
                     color = Slate600,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -270,7 +372,7 @@ private fun BookingDetailContent(
                     listOf("Charging", "DropOff").forEach { option ->
                         val selected = type == option
                         Text(
-                            text = typeLabel(option),
+                            text = reservationTypeLabel(option),
                             color = if (selected) Color.White else Slate700,
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier
@@ -284,7 +386,7 @@ private fun BookingDetailContent(
                                     message = null
                                 }
                                 .padding(vertical = 12.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -315,7 +417,7 @@ private fun BookingDetailContent(
                     colors = fieldColors,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                FieldLabel("Visit start")
+                FieldLabel("Visit start (YYYY-MM-DD HH:mm)")
                 OutlinedTextField(
                     value = start,
                     onValueChange = {
@@ -329,7 +431,7 @@ private fun BookingDetailContent(
                     colors = fieldColors,
                 )
                 Spacer(modifier = Modifier.height(10.dp))
-                FieldLabel("Visit end")
+                FieldLabel("Visit end (YYYY-MM-DD HH:mm)")
                 OutlinedTextField(
                     value = end,
                     onValueChange = {
@@ -526,6 +628,13 @@ private fun FieldLabel(text: String) {
 @Composable
 private fun BookingDetailPreview() {
     GridSyncMobileTheme {
-        BookingDetailScreen(reservationId = "r2")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Grid50),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("BookingDetailScreen", color = Grid900)
+        }
     }
 }

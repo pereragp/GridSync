@@ -8,12 +8,16 @@ import com.gridsync.mobile.data.remote.ApiClient
 import com.gridsync.mobile.data.reservation.ReservationRepository
 import com.gridsync.mobile.data.session.SessionStore
 import com.gridsync.mobile.data.station.StationRepository
+import com.gridsync.mobile.data.user.UserRepository
 
 class GridSyncApp : Application() {
     lateinit var sessionStore: SessionStore
         private set
 
     lateinit var authRepository: AuthRepository
+        private set
+
+    lateinit var userRepository: UserRepository
         private set
 
     lateinit var stationRepository: StationRepository
@@ -33,6 +37,10 @@ class GridSyncApp : Application() {
         sessionStore = SessionStore(this)
         authRepository = AuthRepository(
             authApi = ApiClient.createAuthApi(sessionStore),
+            sessionStore = sessionStore,
+        )
+        userRepository = UserRepository(
+            usersApi = ApiClient.createUsersApi(sessionStore),
             sessionStore = sessionStore,
         )
         stationRepository = StationRepository(
