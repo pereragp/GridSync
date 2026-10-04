@@ -35,6 +35,20 @@ data class UserResponseDto(
     val role: String = "",
     val status: String = "",
     val address: String? = null,
+    val deactivationRequestedAt: String? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+)
+
+data class UpdateUserRequestDto(
+    val fullName: String,
+    val phone: String,
+    val address: String? = null,
+)
+
+data class ChangePasswordRequestDto(
+    val currentPassword: String,
+    val newPassword: String,
 )
 
 data class ApiMessageDto(

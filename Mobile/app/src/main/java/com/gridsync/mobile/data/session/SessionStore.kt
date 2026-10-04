@@ -49,6 +49,19 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    /** Refresh cached display fields after a profile update. */
+    fun updateProfile(
+        fullName: String? = null,
+        status: String? = null,
+        nic: String? = null,
+    ) {
+        val editor = prefs.edit()
+        if (fullName != null) editor.putString(KEY_FULL_NAME, fullName)
+        if (status != null) editor.putString(KEY_STATUS, status)
+        if (nic != null) editor.putString(KEY_NIC, nic)
+        editor.apply()
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

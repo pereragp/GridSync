@@ -223,7 +223,6 @@ fun GridSyncNavHost(
                         navigateToTab(navController, ProsumerTab.Home)
                     },
                     onSignOut = {
-                        app.authRepository.logoutLocal()
                         navController.navigate(AppRoutes.Login) {
                             popUpTo(0) { inclusive = true }
                         }
@@ -297,7 +296,6 @@ fun GridSyncNavHost(
                         navigateToOperatorTab(navController, OperatorTab.Home)
                     },
                     onSignOut = {
-                        app.authRepository.logoutLocal()
                         navController.navigate(AppRoutes.Login) {
                             popUpTo(0) { inclusive = true }
                         }
