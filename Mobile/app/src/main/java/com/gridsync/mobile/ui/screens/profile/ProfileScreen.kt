@@ -56,7 +56,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import com.gridsync.mobile.GridSyncApp
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.data.MockProsumerProfile
 import com.gridsync.mobile.ui.data.MockUserRepository
@@ -85,7 +87,27 @@ fun ProfileScreen(
     onBack: () -> Unit = {},
     onSignOut: () -> Unit = {},
 ) {
-    var profile by remember { mutableStateOf(MockUserRepository.current()) }
+    val session = (LocalContext.current.applicationContext as? GridSyncApp)?.sessionStore?.getSession()
+    val initialProfile = remember(session?.userId, session?.role) {
+        val mock = MockUserRepository.current()
+        if (session == null) {
+            mock
+        } else {
+            mock.copy(
+                id = session.userId.ifBlank { mock.id },
+                fullName = session.fullName.ifBlank { mock.fullName },
+                email = session.email.ifBlank { mock.email },
+                nic = session.nic?.ifBlank { mock.nic } ?: mock.nic,
+                status = session.status.ifBlank { mock.status },
+                role = when {
+                    session.role.equals("GridOperator", ignoreCase = true) -> "Grid Operator"
+                    session.role.isNotBlank() -> session.role
+                    else -> mock.role
+                },
+            )
+        }
+    }
+    var profile by remember { mutableStateOf(initialProfile) }
     var fullName by remember { mutableStateOf(profile.fullName) }
     var phone by remember { mutableStateOf(profile.phone) }
     var address by remember { mutableStateOf(profile.address) }

@@ -18,6 +18,14 @@ object ApiClient {
         return createRetrofit(sessionStore).create(StationsApi::class.java)
     }
 
+    fun createReservationsApi(sessionStore: SessionStore): ReservationsApi {
+        return createRetrofit(sessionStore).create(ReservationsApi::class.java)
+    }
+
+    fun createBookingSlotsApi(sessionStore: SessionStore): BookingSlotsApi {
+        return createRetrofit(sessionStore).create(BookingSlotsApi::class.java)
+    }
+
     fun createRetrofit(sessionStore: SessionStore): Retrofit {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC

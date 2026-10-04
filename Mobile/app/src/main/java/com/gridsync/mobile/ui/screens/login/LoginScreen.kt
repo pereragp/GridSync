@@ -72,7 +72,7 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     onForgotPassword: () -> Unit = {},
     onRegister: () -> Unit = {},
-    onLoginSuccess: () -> Unit = {},
+    onLoginSuccess: (role: String) -> Unit = {},
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -97,14 +97,17 @@ fun LoginScreen(
         scope.launch {
             try {
                 val session = repository.login(email, password)
-                if (!session.role.equals("Prosumer", ignoreCase = true)) {
+                val role = session.role
+                val allowed = role.equals("Prosumer", ignoreCase = true) ||
+                    role.equals("GridOperator", ignoreCase = true)
+                if (!allowed) {
                     repository.logoutLocal()
-                    error = "This app is for Prosumer accounts only. Your role is ${session.role}."
+                    error = "This app supports Prosumer and Grid Operator accounts only. Your role is $role."
                     loading = false
                     return@launch
                 }
                 loading = false
-                onLoginSuccess()
+                onLoginSuccess(role)
             } catch (e: Exception) {
                 loading = false
                 error = e.message ?: "Sign in failed"
@@ -169,7 +172,7 @@ private fun BrandColumn() {
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Sign in to manage microgrid nodes, energy slots, and prosumer reservations.",
+            text = "Sign in as a Prosumer or Grid Operator to manage energy slots, bookings, and transfers.",
             color = Grid100.copy(alpha = 0.85f),
             style = MaterialTheme.typography.bodyMedium,
         )
