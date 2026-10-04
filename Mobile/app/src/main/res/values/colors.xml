@@ -3,6 +3,7 @@
     <color name="grid_900">#FF0C3D25</color>
     <color name="grid_700">#FF12663A</color>
     <color name="grid_500">#FF1F9A57</color>
+    <color name="ic_launcher_background">#FF12663A</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>
