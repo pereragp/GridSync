@@ -142,6 +142,11 @@ if (app.Environment.IsDevelopment())
 }
 
 // CORS must run before HTTPS redirection so OPTIONS preflight gets Allow-Origin headers.
+// Skip HTTPS redirect in Development so the Android emulator can call plain HTTP.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("Frontend");
 app.UseHttpsRedirection();
 app.UseAuthentication();

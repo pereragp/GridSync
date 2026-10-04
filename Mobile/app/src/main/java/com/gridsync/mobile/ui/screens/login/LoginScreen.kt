@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.gridsync.mobile.GridSyncApp
 import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
@@ -64,7 +66,6 @@ import com.gridsync.mobile.ui.theme.Slate600
 import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -79,6 +80,7 @@ fun LoginScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val authRepository = (LocalContext.current.applicationContext as? GridSyncApp)?.authRepository
 
     fun submit() {
         error = null
@@ -86,12 +88,27 @@ fun LoginScreen(
             error = "Email and password are required"
             return
         }
+        val repository = authRepository
+        if (repository == null) {
+            error = "App is not ready. Restart and try again."
+            return
+        }
         loading = true
-        // Frontend-only stub — wire to API later
         scope.launch {
-            delay(800)
-            loading = false
-            onLoginSuccess()
+            try {
+                val session = repository.login(email, password)
+                if (!session.role.equals("Prosumer", ignoreCase = true)) {
+                    repository.logoutLocal()
+                    error = "This app is for Prosumer accounts only. Your role is ${session.role}."
+                    loading = false
+                    return@launch
+                }
+                loading = false
+                onLoginSuccess()
+            } catch (e: Exception) {
+                loading = false
+                error = e.message ?: "Sign in failed"
+            }
         }
     }
 
@@ -109,11 +126,11 @@ fun LoginScreen(
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.Center,
+                .padding(horizontal = 20.dp)
+                .padding(top = 20.dp, bottom = 32.dp),
         ) {
             BrandColumn()
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             SignInCard(
                 email = email,
                 onEmailChange = {
@@ -140,8 +157,8 @@ fun LoginScreen(
 @Composable
 private fun BrandColumn() {
     Column(modifier = Modifier.fillMaxWidth()) {
-        BrandLogo(variant = BrandLogoVariant.Hero)
-        Spacer(modifier = Modifier.height(16.dp))
+        BrandLogo(variant = BrandLogoVariant.Auth)
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = "Power trading, synchronized for a cleaner grid.",
             color = Color.White,
@@ -150,11 +167,11 @@ private fun BrandColumn() {
                 fontWeight = FontWeight.SemiBold,
             ),
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Sign in to manage microgrid nodes, energy slots, and prosumer reservations from one secure console.",
+            text = "Sign in to manage microgrid nodes, energy slots, and prosumer reservations.",
             color = Grid100.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }

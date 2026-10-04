@@ -1,0 +1,13 @@
+## This file must NOT be checked into Version Control Systems,
+## as it contains information specific to your local configuration.
+sdk.dir=/path/to/Android/sdk
+
+# Google Maps SDK for Android API key
+# Enable "Maps SDK for Android" in Google Cloud Console.
+# Restrict the key to this app's package name + SHA-1 when possible.
+MAPS_API_KEY=your_google_maps_android_api_key_here
+
+# Backend API base URL (trailing slash optional)
+# Emulator:        http://10.0.2.2:5269/
+# Physical device: http://YOUR_MAC_LAN_IP:5269/   (same Wi‑Fi as the phone)
+API_BASE_URL=http://10.0.2.2:5269/
