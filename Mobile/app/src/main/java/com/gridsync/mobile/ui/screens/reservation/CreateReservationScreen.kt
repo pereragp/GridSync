@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -50,9 +52,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.gridsync.mobile.ui.data.MockBattery
-import com.gridsync.mobile.ui.data.MockStationDetail
-import com.gridsync.mobile.ui.data.MockStationRepository
+import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.data.remote.dto.AvailableBookingSlotDto
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
 import com.gridsync.mobile.ui.theme.ErrorRed800
@@ -69,14 +70,14 @@ import com.gridsync.mobile.ui.theme.Slate300
 import com.gridsync.mobile.ui.theme.Slate600
 import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
-import kotlinx.coroutines.delay
+import com.gridsync.mobile.ui.util.defaultVisitEndLocal
+import com.gridsync.mobile.ui.util.defaultVisitStartLocal
+import com.gridsync.mobile.ui.util.localDateTimeToIsoUtc
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
-private enum class ReservationTypeUi(val label: String, val hint: String) {
-    Charging("Charging", "Deposit energy into a battery"),
-    DropOff("Drop-off", "Withdraw stored energy"),
+private enum class ReservationTypeUi(val apiValue: String, val label: String, val hint: String) {
+    Charging("Charging", "Charging", "Deposit energy into a battery"),
+    DropOff("DropOff", "Drop-off", "Withdraw stored energy"),
 }
 
 private enum class BookingStep(val index: Int, val title: String, val subtitle: String) {
@@ -86,38 +87,81 @@ private enum class BookingStep(val index: Int, val title: String, val subtitle: 
     Review(3, "Review & submit", "Confirm before creating your reservation"),
 }
 
+private data class StationOption(
+    val id: String,
+    val name: String,
+    val batteryCount: Int,
+    val chargeAvail: Double,
+    val dropOffAvail: Double,
+)
+
 @Composable
 fun CreateReservationScreen(
     initialStationId: String? = null,
     onBack: () -> Unit = {},
     onSuccess: () -> Unit = {},
 ) {
-    val stations = MockStationRepository.stations
-    var step by remember {
-        mutableIntStateOf(
-            if (initialStationId != null && stations.any { it.id == initialStationId }) {
-                BookingStep.Battery.index
-            } else {
-                BookingStep.Station.index
-            }
-        )
-    }
-    var stationId by remember {
-        mutableStateOf(initialStationId?.takeIf { id -> stations.any { it.id == id } } ?: "")
-    }
+    val context = LocalContext.current
+    val app = context.applicationContext as GridSyncApp
+    val scope = rememberCoroutineScope()
+
+    var slots by remember { mutableStateOf<List<AvailableBookingSlotDto>>(emptyList()) }
+    var loadingSlots by remember { mutableStateOf(true) }
+    var slotsError by remember { mutableStateOf<String?>(null) }
+
+    var step by remember { mutableIntStateOf(BookingStep.Station.index) }
+    var stationId by remember { mutableStateOf("") }
     var batteryId by remember { mutableStateOf("") }
     var reservationType by remember { mutableStateOf(ReservationTypeUi.Charging) }
     var energyKwh by remember { mutableStateOf("") }
-    var visitStart by remember { mutableStateOf(defaultVisitStart()) }
-    var visitEnd by remember { mutableStateOf(defaultVisitEnd()) }
+    var visitStart by remember { mutableStateOf(defaultVisitStartLocal()) }
+    var visitEnd by remember { mutableStateOf(defaultVisitEndLocal()) }
     var error by remember { mutableStateOf<String?>(null) }
     var success by remember { mutableStateOf(false) }
+    var createdCode by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
 
+    fun applyInitialStation(options: List<StationOption>) {
+        val match = initialStationId?.takeIf { id -> options.any { it.id == id } }
+        if (match != null) {
+            stationId = match
+            step = BookingStep.Battery.index
+        }
+    }
+
+    fun reloadSlots() {
+        scope.launch {
+            loadingSlots = true
+            slotsError = null
+            try {
+                slots = app.reservationRepository.getAvailableSlots()
+                val options = groupStations(slots)
+                if (stationId.isBlank()) {
+                    applyInitialStation(options)
+                } else if (options.none { it.id == stationId }) {
+                    stationId = ""
+                    batteryId = ""
+                    step = BookingStep.Station.index
+                }
+            } catch (e: Exception) {
+                slotsError = e.message ?: "Could not load available batteries"
+                slots = emptyList()
+            } finally {
+                loadingSlots = false
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        reloadSlots()
+    }
+
+    val stations = remember(slots) { groupStations(slots) }
     val currentStep = BookingStep.entries[step]
     val selectedStation = stations.find { it.id == stationId }
-    val batteries = selectedStation?.batteries.orEmpty()
+    val batteries = remember(slots, stationId) {
+        slots.filter { it.stationId == stationId }.sortedBy { it.batteryIndex }
+    }
     val selectedBattery = batteries.find { it.id == batteryId }
     val availableForType = selectedBattery?.let {
         if (reservationType == ReservationTypeUi.DropOff) it.availableDropOffKwh
@@ -164,7 +208,16 @@ fun CreateReservationScreen(
                         error = "Visit start and end are required"
                         false
                     }
-                    else -> true
+                    else -> {
+                        try {
+                            localDateTimeToIsoUtc(visitStart)
+                            localDateTimeToIsoUtc(visitEnd)
+                            true
+                        } catch (e: IllegalArgumentException) {
+                            error = e.message
+                            false
+                        }
+                    }
                 }
             }
             BookingStep.Review -> true
@@ -180,11 +233,29 @@ fun CreateReservationScreen(
 
     fun submit() {
         if (!validateCurrentStep()) return
+        val slot = selectedBattery ?: run {
+            error = "Select a battery to continue"
+            return
+        }
+        val energy = energyKwh.toDoubleOrNull() ?: return
         loading = true
+        error = null
         scope.launch {
-            delay(900)
-            loading = false
-            success = true
+            try {
+                val created = app.reservationRepository.create(
+                    slotId = slot.id,
+                    reservationType = reservationType.apiValue,
+                    energyKwh = energy,
+                    slotStartIso = localDateTimeToIsoUtc(visitStart),
+                    slotEndIso = localDateTimeToIsoUtc(visitEnd),
+                )
+                createdCode = created.reservationCode.ifBlank { null }
+                success = true
+            } catch (e: Exception) {
+                error = e.message ?: "Could not create reservation"
+            } finally {
+                loading = false
+            }
         }
     }
 
@@ -204,13 +275,22 @@ fun CreateReservationScreen(
         if (success) {
             SuccessPanel(
                 stationName = selectedStation?.name.orEmpty(),
+                reservationCode = createdCode,
                 onDone = onSuccess,
                 onCreateAnother = {
                     success = false
-                    step = if (initialStationId != null) BookingStep.Battery.index else BookingStep.Station.index
+                    createdCode = null
+                    step = if (initialStationId != null && stations.any { it.id == initialStationId }) {
+                        BookingStep.Battery.index
+                    } else {
+                        BookingStep.Station.index
+                    }
                     batteryId = ""
                     energyKwh = ""
+                    visitStart = defaultVisitStartLocal()
+                    visitEnd = defaultVisitEndLocal()
                     error = null
+                    reloadSlots()
                 },
             )
             return
@@ -226,6 +306,50 @@ fun CreateReservationScreen(
                 .padding(top = 8.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (loadingSlots) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = Grid700,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Loading available batteries…",
+                        color = Slate600,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            if (slotsError != null) {
+                Text(
+                    text = slotsError!!,
+                    color = ErrorRed800,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ErrorRed50)
+                        .border(1.dp, ErrorRed200, RoundedCornerShape(10.dp))
+                        .padding(12.dp),
+                )
+                OutlinedButton(
+                    onClick = { reloadSlots() },
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Slate300),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Slate700),
+                ) {
+                    Text("Retry", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+
             if (error != null) {
                 Text(
                     text = error!!,
@@ -240,65 +364,67 @@ fun CreateReservationScreen(
                 )
             }
 
-            when (currentStep) {
-                BookingStep.Station -> StepStationContent(
-                    stations = stations,
-                    stationId = stationId,
-                    onSelect = {
-                        stationId = it
-                        batteryId = ""
-                        energyKwh = ""
-                        error = null
-                    },
-                )
-                BookingStep.Battery -> StepBatteryContent(
-                    station = selectedStation,
-                    batteries = batteries,
-                    batteryId = batteryId,
-                    onSelect = {
-                        batteryId = it
-                        error = null
-                    },
-                )
-                BookingStep.Details -> StepDetailsContent(
-                    reservationType = reservationType,
-                    onTypeChange = {
-                        reservationType = it
-                        error = null
-                    },
-                    energyKwh = energyKwh,
-                    onEnergyChange = {
-                        energyKwh = it
-                        error = null
-                    },
-                    availableForType = availableForType,
-                    batterySelected = batteryId.isNotBlank(),
-                    visitStart = visitStart,
-                    onVisitStartChange = {
-                        visitStart = it
-                        error = null
-                    },
-                    visitEnd = visitEnd,
-                    onVisitEndChange = {
-                        visitEnd = it
-                        error = null
-                    },
-                )
-                BookingStep.Review -> StepReviewContent(
-                    station = selectedStation,
-                    battery = selectedBattery,
-                    reservationType = reservationType,
-                    energyKwh = energyKwh,
-                    visitStart = visitStart,
-                    visitEnd = visitEnd,
-                )
+            if (!loadingSlots && slotsError == null) {
+                when (currentStep) {
+                    BookingStep.Station -> StepStationContent(
+                        stations = stations,
+                        stationId = stationId,
+                        onSelect = {
+                            stationId = it
+                            batteryId = ""
+                            energyKwh = ""
+                            error = null
+                        },
+                    )
+                    BookingStep.Battery -> StepBatteryContent(
+                        stationName = selectedStation?.name,
+                        batteries = batteries,
+                        batteryId = batteryId,
+                        onSelect = {
+                            batteryId = it
+                            error = null
+                        },
+                    )
+                    BookingStep.Details -> StepDetailsContent(
+                        reservationType = reservationType,
+                        onTypeChange = {
+                            reservationType = it
+                            error = null
+                        },
+                        energyKwh = energyKwh,
+                        onEnergyChange = {
+                            energyKwh = it
+                            error = null
+                        },
+                        availableForType = availableForType,
+                        batterySelected = batteryId.isNotBlank(),
+                        visitStart = visitStart,
+                        onVisitStartChange = {
+                            visitStart = it
+                            error = null
+                        },
+                        visitEnd = visitEnd,
+                        onVisitEndChange = {
+                            visitEnd = it
+                            error = null
+                        },
+                    )
+                    BookingStep.Review -> StepReviewContent(
+                        stationName = selectedStation?.name,
+                        battery = selectedBattery,
+                        reservationType = reservationType,
+                        energyKwh = energyKwh,
+                        visitStart = visitStart,
+                        visitEnd = visitEnd,
+                    )
+                }
             }
         }
 
         WizardFooter(
             step = currentStep,
             loading = loading,
-            primaryEnabled = when (currentStep) {
+            primaryEnabled = !loadingSlots && slotsError == null && when (currentStep) {
                 BookingStep.Station -> stationId.isNotBlank()
                 BookingStep.Battery -> batteryId.isNotBlank()
                 BookingStep.Details -> energyKwh.isNotBlank()
@@ -310,6 +436,30 @@ fun CreateReservationScreen(
             },
         )
     }
+}
+
+private fun groupStations(slots: List<AvailableBookingSlotDto>): List<StationOption> {
+    val byId = linkedMapOf<String, StationOption>()
+    for (slot in slots) {
+        if (slot.stationId.isBlank()) continue
+        val existing = byId[slot.stationId]
+        if (existing != null) {
+            byId[slot.stationId] = existing.copy(
+                batteryCount = existing.batteryCount + 1,
+                chargeAvail = existing.chargeAvail + slot.availableChargingKwh,
+                dropOffAvail = existing.dropOffAvail + slot.availableDropOffKwh,
+            )
+        } else {
+            byId[slot.stationId] = StationOption(
+                id = slot.stationId,
+                name = slot.stationName.ifBlank { "Unknown station" },
+                batteryCount = 1,
+                chargeAvail = slot.availableChargingKwh,
+                dropOffAvail = slot.availableDropOffKwh,
+            )
+        }
+    }
+    return byId.values.sortedBy { it.name.lowercase() }
 }
 
 @Composable
@@ -471,38 +621,42 @@ private fun WizardFooter(
 
 @Composable
 private fun StepStationContent(
-    stations: List<MockStationDetail>,
+    stations: List<StationOption>,
     stationId: String,
     onSelect: (String) -> Unit,
 ) {
     StepTitle(BookingStep.Station.title)
-    stations.forEach { station ->
-        StationPickCard(
-            station = station,
-            selected = station.id == stationId,
-            onClick = { onSelect(station.id) },
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+    if (stations.isEmpty()) {
+        EmptyHint("No stations currently have bookable batteries.")
+    } else {
+        stations.forEach { station ->
+            StationPickCard(
+                station = station,
+                selected = station.id == stationId,
+                onClick = { onSelect(station.id) },
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
     }
 }
 
 @Composable
 private fun StepBatteryContent(
-    station: MockStationDetail?,
-    batteries: List<MockBattery>,
+    stationName: String?,
+    batteries: List<AvailableBookingSlotDto>,
     batteryId: String,
     onSelect: (String) -> Unit,
 ) {
     StepTitle(BookingStep.Battery.title)
-    if (station != null) {
+    if (stationName != null) {
         Text(
-            text = station.name,
+            text = stationName,
             color = Grid700,
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(bottom = 4.dp),
         )
     }
-    if (station == null) {
+    if (stationName == null) {
         EmptyHint("Go back and select a station first.")
     } else if (batteries.isEmpty()) {
         EmptyHint("No batteries available at this station.")
@@ -596,12 +750,6 @@ private fun StepDetailsContent(
         shape = RoundedCornerShape(8.dp),
         colors = fieldColors,
     )
-    Text(
-        text = "UI stub — replace with date/time pickers when wiring.",
-        color = Slate600,
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.padding(top = 4.dp),
-    )
 
     Spacer(modifier = Modifier.height(8.dp))
     FieldLabel("Visit end")
@@ -625,8 +773,8 @@ private fun StepDetailsContent(
 
 @Composable
 private fun StepReviewContent(
-    station: MockStationDetail?,
-    battery: MockBattery?,
+    stationName: String?,
+    battery: AvailableBookingSlotDto?,
     reservationType: ReservationTypeUi,
     energyKwh: String,
     visitStart: String,
@@ -647,7 +795,7 @@ private fun StepReviewContent(
             .border(1.dp, Grid100, RoundedCornerShape(14.dp))
             .padding(16.dp)
     ) {
-        ReviewRow("Station", station?.name ?: "—")
+        ReviewRow("Station", stationName ?: "—")
         HorizontalDivider(color = Color(0xFFE2E8F0), modifier = Modifier.padding(vertical = 10.dp))
         ReviewRow("Battery", battery?.let { "#${it.batteryIndex}" } ?: "—")
         HorizontalDivider(color = Color(0xFFE2E8F0), modifier = Modifier.padding(vertical = 10.dp))
@@ -694,6 +842,7 @@ private fun StepTitle(text: String) {
 @Composable
 private fun SuccessPanel(
     stationName: String,
+    reservationCode: String?,
     onDone: () -> Unit,
     onCreateAnother: () -> Unit,
 ) {
@@ -718,7 +867,13 @@ private fun SuccessPanel(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Your booking at $stationName is Pending until a Grid Operator approves it. QR appears after approval.",
+                text = buildString {
+                    append("Your booking at $stationName is Pending until a Grid Operator approves it.")
+                    if (!reservationCode.isNullOrBlank()) {
+                        append(" Code: $reservationCode.")
+                    }
+                    append(" QR appears after approval.")
+                },
                 color = Slate700,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -734,7 +889,7 @@ private fun SuccessPanel(
                     contentColor = Color.White,
                 ),
             ) {
-                Text("Back to dashboard", style = MaterialTheme.typography.labelLarge)
+                Text("View my bookings", style = MaterialTheme.typography.labelLarge)
             }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(
@@ -769,12 +924,10 @@ private fun EmptyHint(text: String) {
 
 @Composable
 private fun StationPickCard(
-    station: MockStationDetail,
+    station: StationOption,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val charge = station.batteries.sumOf { it.availableChargingKwh }
-    val drop = station.batteries.sumOf { it.availableDropOffKwh }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -801,7 +954,7 @@ private fun StationPickCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${station.batteries.size} batteries · ${"%.1f".format(station.distanceKm)} km",
+                    text = "${station.batteryCount} batteries available",
                     color = Slate600,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -821,12 +974,12 @@ private fun StationPickCard(
         Spacer(modifier = Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(
-                text = "Charge ${"%.1f".format(charge)} kWh",
+                text = "Charge ${"%.1f".format(station.chargeAvail)} kWh",
                 color = Slate700,
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(
-                text = "Drop-off ${"%.1f".format(drop)} kWh",
+                text = "Drop-off ${"%.1f".format(station.dropOffAvail)} kWh",
                 color = Slate700,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -836,7 +989,7 @@ private fun StationPickCard(
 
 @Composable
 private fun BatteryPickCard(
-    battery: MockBattery,
+    battery: AvailableBookingSlotDto,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -993,20 +1146,17 @@ private fun FieldLabel(text: String) {
     )
 }
 
-private fun defaultVisitStart(): String {
-    val start = LocalDateTime.now().plusDays(1).withMinute(0).withSecond(0).withNano(0)
-    return start.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-}
-
-private fun defaultVisitEnd(): String {
-    val end = LocalDateTime.now().plusDays(1).plusHours(1).withMinute(0).withSecond(0).withNano(0)
-    return end.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-}
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun CreateReservationPreview() {
     GridSyncMobileTheme {
-        CreateReservationScreen(initialStationId = "1")
+        // Preview requires GridSyncApp — UI shell only in editor.
+        Box(Modifier.fillMaxSize().background(Grid50)) {
+            Text(
+                "CreateReservationScreen",
+                modifier = Modifier.align(Alignment.Center),
+                color = Grid900,
+            )
+        }
     }
 }

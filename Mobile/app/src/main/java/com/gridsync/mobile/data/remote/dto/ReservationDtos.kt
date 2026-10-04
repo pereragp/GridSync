@@ -26,6 +26,39 @@ data class ReservationDto(
     val updatedAt: String? = null,
 )
 
+/** Battery shown to prosumers for Charging / DropOff booking. */
+data class AvailableBookingSlotDto(
+    val id: String = "",
+    val stationId: String = "",
+    val stationName: String = "",
+    val batteryIndex: Int = 0,
+    val capacityKwh: Double = 0.0,
+    val actualEnergyKwh: Double = 0.0,
+    val availableChargingKwh: Double = 0.0,
+    val availableDropOffKwh: Double = 0.0,
+    val status: String = "",
+    val notes: String? = null,
+)
+
+data class CreateReservationRequestDto(
+    val slotId: String,
+    val reservationType: String,
+    val energyKwh: Double,
+    val slotStart: String,
+    val slotEnd: String,
+)
+
+data class UpdateReservationRequestDto(
+    val reservationType: String,
+    val energyKwh: Double,
+    val slotStart: String,
+    val slotEnd: String,
+)
+
+data class CancelReservationRequestDto(
+    val reason: String? = null,
+)
+
 data class ReservationDashboardStatsDto(
     val pendingReservations: Long = 0,
     val approvedUpcomingReservations: Long = 0,
@@ -33,6 +66,11 @@ data class ReservationDashboardStatsDto(
     val rejectedReservations: Long = 0,
     val cancelledReservations: Long = 0,
     val expiredReservations: Long = 0,
+)
+
+data class ProsumerDashboardStatsDto(
+    val pendingReservations: Long = 0,
+    val activeReservations: Long = 0,
 )
 
 data class RejectReservationRequestDto(
