@@ -345,8 +345,10 @@ private fun OperatorHero(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Review bookings, update battery availability, and complete on-site transfers.",
-                    color = Grid100.copy(alpha = 0.88f),
-                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Medium,
+                    ),
                 )
 
             }
