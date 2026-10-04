@@ -345,43 +345,12 @@ private fun OperatorHero(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Review bookings, update battery availability, and complete on-site transfers.",
-                    color = Grid100.copy(alpha = 0.88f),
-                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Medium,
+                    ),
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = onReviewBookings,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Grid800,
-                        ),
-                    ) {
-                        Text(
-                            text = if (pendingCount > 0) "Review ($pendingCount)" else "Review bookings",
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onScanQr,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    ) {
-                        Text("Scan QR", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Battery stations →",
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenStations)
-                        .padding(vertical = 4.dp),
-                )
+
             }
         }
     }
