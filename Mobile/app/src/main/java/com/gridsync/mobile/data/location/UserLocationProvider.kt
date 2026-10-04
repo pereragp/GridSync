@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -44,20 +45,40 @@ class UserLocationProvider(
         return fine || coarse
     }
 
+    /** System location toggle (GPS / network). Permission alone is not enough. */
+    fun isLocationEnabled(): Boolean {
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        return runCatching {
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }.getOrDefault(false)
+    }
+
     @SuppressLint("MissingPermission")
-    suspend fun resolve(preferFresh: Boolean = true): ResolvedLocation {
+    suspend fun resolve(
+        preferFresh: Boolean = true,
+        highAccuracy: Boolean = false,
+    ): ResolvedLocation {
         if (!hasLocationPermission()) {
             return ResolvedLocation(FALLBACK_COLOMBO, isFallback = true)
         }
+        if (!isLocationEnabled()) {
+            return ResolvedLocation(FALLBACK_COLOMBO, isFallback = true)
+        }
+
+        val priority = if (highAccuracy) {
+            Priority.PRIORITY_HIGH_ACCURACY
+        } else {
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        }
+        val timeoutMs = if (highAccuracy) 12_000L else 8_000L
 
         val current = if (preferFresh) {
-            withTimeoutOrNull(8_000L) {
+            withTimeoutOrNull(timeoutMs) {
                 val token = CancellationTokenSource()
                 try {
-                    fusedClient.getCurrentLocation(
-                        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                        token.token,
-                    ).await()
+                    fusedClient.getCurrentLocation(priority, token.token).await()
                 } finally {
                     token.cancel()
                 }

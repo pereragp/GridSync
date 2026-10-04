@@ -2,6 +2,7 @@ package com.gridsync.mobile.data.auth
 
 import com.gridsync.mobile.data.remote.ApiException
 import com.gridsync.mobile.data.remote.AuthApi
+import com.gridsync.mobile.data.remote.dto.ChangePasswordRequestDto
 import com.gridsync.mobile.data.remote.dto.LoginRequestDto
 import com.gridsync.mobile.data.remote.dto.RegisterProsumerRequestDto
 import com.gridsync.mobile.data.remote.dto.UserResponseDto
@@ -66,6 +67,32 @@ class AuthRepository(
             )
         } catch (e: Exception) {
             throw ApiException(e.toUserMessage())
+        }
+    }
+
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        try {
+            authApi.changePassword(
+                ChangePasswordRequestDto(
+                    currentPassword = currentPassword,
+                    newPassword = newPassword,
+                )
+            )
+        } catch (e: Exception) {
+            throw ApiException(e.toUserMessage())
+        }
+    }
+
+    /**
+     * Revokes the JWT on the server when possible, then clears local session.
+     */
+    suspend fun logout() {
+        try {
+            authApi.logout()
+        } catch (_: Exception) {
+            // Still clear local session if the revoke call fails (offline / expired token).
+        } finally {
+            sessionStore.clear()
         }
     }
 

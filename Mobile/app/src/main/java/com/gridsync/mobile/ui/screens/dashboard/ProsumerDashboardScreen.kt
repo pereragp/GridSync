@@ -1,6 +1,8 @@
 package com.gridsync.mobile.ui.screens.dashboard
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -22,11 +24,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -67,7 +73,6 @@ import com.gridsync.mobile.data.station.StationRepository
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
-import com.gridsync.mobile.ui.data.MockReservationRepository
 import com.gridsync.mobile.ui.data.MockStationRepository
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
@@ -86,6 +91,12 @@ import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
 import kotlinx.coroutines.launch
+
+private sealed interface MapCameraFocus {
+    data object User : MapCameraFocus
+    data class Station(val id: String) : MapCameraFocus
+    data object FitAll : MapCameraFocus
+}
 
 data class NearbyStationUi(
     val id: String,
@@ -125,13 +136,12 @@ private fun NearbyStationResponseDto.toUi() = NearbyStationUi(
 @Composable
 fun ProsumerDashboardScreen(
     userName: String = "Prosumer",
-    pendingCount: Int = MockReservationRepository.pendingCount(),
-    activeCount: Int = MockReservationRepository.approvedCount(),
     onBookEnergy: () -> Unit = {},
     onMyBookings: () -> Unit = {},
     onStationClick: (NearbyStationUi) -> Unit = {},
 ) {
-    val app = LocalContext.current.applicationContext as GridSyncApp
+    val context = LocalContext.current
+    val app = context.applicationContext as GridSyncApp
     val scope = rememberCoroutineScope()
 
     var nearbyStations by remember { mutableStateOf<List<NearbyStationUi>>(emptyList()) }
@@ -139,22 +149,46 @@ fun ProsumerDashboardScreen(
     var locationPermissionGranted by remember {
         mutableStateOf(app.userLocationProvider.hasLocationPermission())
     }
+    var locationServicesEnabled by remember {
+        mutableStateOf(app.userLocationProvider.isLocationEnabled())
+    }
     var usingFallbackLocation by remember { mutableStateOf(false) }
     var isLoadingNearby by remember { mutableStateOf(true) }
+    var isLocatingUser by remember { mutableStateOf(false) }
     var nearbyError by remember { mutableStateOf<String?>(null) }
     var selectedStationId by remember { mutableStateOf<String?>(null) }
+    var cameraFocus by remember { mutableStateOf<MapCameraFocus>(MapCameraFocus.FitAll) }
     var reloadToken by remember { mutableStateOf(0) }
     var didRequestPermission by remember { mutableStateOf(false) }
+    var pendingCount by remember { mutableStateOf(0) }
+    var activeCount by remember { mutableStateOf(0) }
+    var statsLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        statsLoading = true
+        try {
+            val stats = app.reservationRepository.getProsumerDashboardStats()
+            pendingCount = stats.pendingReservations.toInt()
+            activeCount = stats.activeReservations.toInt()
+        } catch (_: Exception) {
+            pendingCount = 0
+            activeCount = 0
+        } finally {
+            statsLoading = false
+        }
+    }
 
     fun loadNearby() {
         scope.launch {
             isLoadingNearby = true
             nearbyError = null
             try {
+                locationPermissionGranted = app.userLocationProvider.hasLocationPermission()
+                locationServicesEnabled = app.userLocationProvider.isLocationEnabled()
+
                 val resolved = app.userLocationProvider.resolve()
                 usingFallbackLocation = resolved.isFallback
                 userLocation = resolved.point
-                locationPermissionGranted = app.userLocationProvider.hasLocationPermission()
 
                 val stations = app.stationRepository.getNearby(
                     latitude = resolved.point.latitude,
@@ -165,6 +199,14 @@ fun ProsumerDashboardScreen(
                 nearbyStations = stations
                 if (selectedStationId == null || stations.none { it.id == selectedStationId }) {
                     selectedStationId = stations.firstOrNull()?.id
+                }
+                // Keep focus on user if they just tapped locate-me; otherwise fit markers.
+                if (cameraFocus !is MapCameraFocus.User) {
+                    cameraFocus = if (stations.isEmpty()) {
+                        MapCameraFocus.User
+                    } else {
+                        MapCameraFocus.FitAll
+                    }
                 }
             } catch (e: Exception) {
                 nearbyError = e.message ?: "Could not load nearby stations."
@@ -180,7 +222,47 @@ fun ProsumerDashboardScreen(
     ) { result ->
         locationPermissionGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        locationServicesEnabled = app.userLocationProvider.isLocationEnabled()
         reloadToken += 1
+    }
+
+    fun centerOnMyLocation() {
+        scope.launch {
+            locationPermissionGranted = app.userLocationProvider.hasLocationPermission()
+            locationServicesEnabled = app.userLocationProvider.isLocationEnabled()
+
+            if (!locationPermissionGranted) {
+                didRequestPermission = true
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    )
+                )
+                return@launch
+            }
+
+            if (!locationServicesEnabled) {
+                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                return@launch
+            }
+
+            isLocatingUser = true
+            try {
+                val resolved = app.userLocationProvider.resolve(highAccuracy = true)
+                userLocation = resolved.point
+                usingFallbackLocation = resolved.isFallback
+                selectedStationId = null
+                cameraFocus = MapCameraFocus.User
+
+                if (!resolved.isFallback) {
+                    // Refresh nearby around the real GPS point.
+                    reloadToken += 1
+                }
+            } finally {
+                isLocatingUser = false
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -203,7 +285,9 @@ fun ProsumerDashboardScreen(
     val subtitle = when {
         isLoadingNearby -> "Finding stations near you…"
         nearbyError != null -> "Could not refresh nearby stations."
-        usingFallbackLocation -> "Showing stations near Colombo (enable location for GPS)."
+        !locationPermissionGranted -> "Allow location access to see hubs near you."
+        !locationServicesEnabled -> "Turn on Location in system settings, then tap the locate button."
+        usingFallbackLocation -> "GPS unavailable — showing Colombo area. Tap locate to retry."
         else -> "Active hubs within ${StationRepository.DEFAULT_RADIUS_KM.toInt()} km of you."
     }
 
@@ -258,7 +342,7 @@ fun ProsumerDashboardScreen(
                 ) {
                     StatCard(
                         label = "Pending",
-                        value = pendingCount.toString(),
+                        value = if (statsLoading) "…" else pendingCount.toString(),
                         hint = "Awaiting review",
                         modifier = Modifier
                             .weight(1f)
@@ -266,7 +350,7 @@ fun ProsumerDashboardScreen(
                     )
                     StatCard(
                         label = "Active",
-                        value = activeCount.toString(),
+                        value = if (statsLoading) "…" else activeCount.toString(),
                         hint = "Approved bookings",
                         modifier = Modifier
                             .weight(1f)
@@ -311,10 +395,17 @@ fun ProsumerDashboardScreen(
                     stations = nearbyStations,
                     userLocation = userLocation,
                     selectedStationId = selectedStationId,
+                    cameraFocus = cameraFocus,
                     locationPermissionGranted = locationPermissionGranted,
+                    locationServicesEnabled = locationServicesEnabled,
                     isLoading = isLoadingNearby,
+                    isLocatingUser = isLocatingUser,
                     error = nearbyError,
-                    onSelectStation = { selectedStationId = it.id },
+                    onSelectStation = { station ->
+                        selectedStationId = station.id
+                        cameraFocus = MapCameraFocus.Station(station.id)
+                    },
+                    onMyLocationClick = { centerOnMyLocation() },
                     onRetry = { reloadToken += 1 },
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -338,6 +429,7 @@ fun ProsumerDashboardScreen(
                 selected = station.id == selectedStationId,
                 onClick = {
                     selectedStationId = station.id
+                    cameraFocus = MapCameraFocus.Station(station.id)
                     onStationClick(station)
                 },
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp),
@@ -483,10 +575,14 @@ private fun NearbyStationsMap(
     stations: List<NearbyStationUi>,
     userLocation: LatLngPoint,
     selectedStationId: String?,
+    cameraFocus: MapCameraFocus,
     locationPermissionGranted: Boolean,
+    locationServicesEnabled: Boolean,
     isLoading: Boolean,
+    isLocatingUser: Boolean,
     error: String?,
     onSelectStation: (NearbyStationUi) -> Unit,
+    onMyLocationClick: () -> Unit,
     onRetry: () -> Unit,
 ) {
     val userLatLng = remember(userLocation) {
@@ -497,34 +593,47 @@ private fun NearbyStationsMap(
     }
     // CameraUpdateFactory is only safe after the Maps SDK has loaded the map.
     var mapReady by remember { mutableStateOf(false) }
+    val showMyLocationLayer = locationPermissionGranted && locationServicesEnabled
 
-    LaunchedEffect(mapReady, userLocation, stations, selectedStationId) {
+    LaunchedEffect(mapReady, userLocation, stations, cameraFocus) {
         if (!mapReady) return@LaunchedEffect
 
         try {
-            val selected = stations.firstOrNull { it.id == selectedStationId }
-            if (selected != null) {
-                cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngZoom(
-                        LatLng(selected.latitude, selected.longitude),
-                        13.5f,
+            when (cameraFocus) {
+                is MapCameraFocus.User -> {
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngZoom(userLatLng, 15f)
                     )
-                )
-                return@LaunchedEffect
-            }
+                }
 
-            if (stations.isEmpty()) {
-                cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngZoom(userLatLng, 12f)
-                )
-                return@LaunchedEffect
-            }
+                is MapCameraFocus.Station -> {
+                    val selected = stations.firstOrNull { it.id == cameraFocus.id }
+                    if (selected != null) {
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngZoom(
+                                LatLng(selected.latitude, selected.longitude),
+                                13.5f,
+                            )
+                        )
+                    }
+                }
 
-            val bounds = LatLngBounds.builder().apply {
-                include(userLatLng)
-                stations.forEach { include(LatLng(it.latitude, it.longitude)) }
-            }.build()
-            cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(bounds, 80))
+                MapCameraFocus.FitAll -> {
+                    if (stations.isEmpty()) {
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngZoom(userLatLng, 12f)
+                        )
+                    } else {
+                        val bounds = LatLngBounds.builder().apply {
+                            include(userLatLng)
+                            stations.forEach { include(LatLng(it.latitude, it.longitude)) }
+                        }.build()
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngBounds(bounds, 80)
+                        )
+                    }
+                }
+            }
         } catch (_: Exception) {
             // Avoid crashing Home if camera animation races map init.
             cameraPositionState.position = CameraPosition.fromLatLngZoom(userLatLng, 12f)
@@ -541,10 +650,11 @@ private fun NearbyStationsMap(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = locationPermissionGranted),
+            properties = MapProperties(isMyLocationEnabled = showMyLocationLayer),
             uiSettings = MapUiSettings(
                 zoomControlsEnabled = false,
-                myLocationButtonEnabled = locationPermissionGranted,
+                // Custom locate button — Maps' built-in control is unreliable inside LazyColumn.
+                myLocationButtonEnabled = false,
                 mapToolbarEnabled = false,
                 compassEnabled = false,
             ),
@@ -571,6 +681,33 @@ private fun NearbyStationsMap(
                         },
                     )
                 }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(12.dp)
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+                .border(1.dp, Grid100, CircleShape)
+                .clickable(enabled = !isLocatingUser, onClick = onMyLocationClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isLocatingUser) {
+                CircularProgressIndicator(
+                    color = Grid700,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.MyLocation,
+                    contentDescription = "My location",
+                    tint = if (showMyLocationLayer) Grid700 else Slate600,
+                    modifier = Modifier.size(22.dp),
+                )
             }
         }
 
