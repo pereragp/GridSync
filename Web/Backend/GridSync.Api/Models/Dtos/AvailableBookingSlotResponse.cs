@@ -13,4 +13,13 @@ public class AvailableBookingSlotResponse
     public double AvailableDropOffKwh { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Notes { get; set; }
+
+    /// <summary>Station open time (HH:mm, station local / Asia/Colombo).</summary>
+    public string OpenTime { get; set; } = "08:00";
+
+    /// <summary>Station close time (HH:mm, station local / Asia/Colombo).</summary>
+    public string CloseTime { get; set; } = "18:00";
+
+    /// <summary>Working day abbreviations (Mon…Sun).</summary>
+    public List<string> WorkingDays { get; set; } = [];
 }

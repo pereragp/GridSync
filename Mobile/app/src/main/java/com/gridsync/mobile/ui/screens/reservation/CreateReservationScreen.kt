@@ -72,6 +72,7 @@ import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.util.defaultVisitEndLocal
 import com.gridsync.mobile.ui.util.defaultVisitStartLocal
+import com.gridsync.mobile.ui.util.validateVisitWithinStationHours
 import com.gridsync.mobile.ui.util.localDateTimeToIsoUtc
 import kotlinx.coroutines.launch
 
@@ -212,6 +213,16 @@ fun CreateReservationScreen(
                         try {
                             localDateTimeToIsoUtc(visitStart)
                             localDateTimeToIsoUtc(visitEnd)
+                            val battery = selectedBattery
+                            if (battery != null) {
+                                validateVisitWithinStationHours(
+                                    visitStartLocal = visitStart,
+                                    visitEndLocal = visitEnd,
+                                    openTime = battery.openTime.ifBlank { "08:00" },
+                                    closeTime = battery.closeTime.ifBlank { "18:00" },
+                                    workingDays = battery.workingDays,
+                                )
+                            }
                             true
                         } catch (e: IllegalArgumentException) {
                             error = e.message
@@ -408,6 +419,9 @@ fun CreateReservationScreen(
                             visitEnd = it
                             error = null
                         },
+                        openTime = selectedBattery?.openTime.orEmpty().ifBlank { "08:00" },
+                        closeTime = selectedBattery?.closeTime.orEmpty().ifBlank { "18:00" },
+                        workingDays = selectedBattery?.workingDays.orEmpty(),
                     )
                     BookingStep.Review -> StepReviewContent(
                         stationName = selectedStation?.name,
@@ -684,8 +698,17 @@ private fun StepDetailsContent(
     onVisitStartChange: (String) -> Unit,
     visitEnd: String,
     onVisitEndChange: (String) -> Unit,
+    openTime: String = "08:00",
+    closeTime: String = "18:00",
+    workingDays: List<String> = emptyList(),
 ) {
     StepTitle(BookingStep.Details.title)
+    val hoursLabel = "$openTime–$closeTime"
+    val daysLabel = if (workingDays.isEmpty()) {
+        "station working days"
+    } else {
+        workingDays.joinToString(", ")
+    }
 
     Text(
         text = "TYPE",
@@ -764,7 +787,8 @@ private fun StepDetailsContent(
     )
 
     Text(
-        text = "Bookings must be within 7 days. Updates/cancels need ≥ 12 hours’ notice.",
+        text = "Visit must fall on $daysLabel between $hoursLabel. " +
+            "Bookings must be within 7 days. Updates/cancels need ≥ 12 hours’ notice.",
         color = Slate600,
         style = MaterialTheme.typography.bodySmall,
         modifier = Modifier.padding(top = 8.dp),

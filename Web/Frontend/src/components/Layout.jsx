@@ -71,25 +71,6 @@ export default function Layout() {
               </>
             )}
 
-            {user.role === 'Prosumer' && (
-              <>
-                <NavLink className={navClass} to='/prosumer'>
-                  Dashboard
-                </NavLink>
-                <NavLink className={navClass} to='/reservations'>
-                  Reservations
-                </NavLink>
-                <NavLink className={navClass} to='/stations'>
-                  Stations
-                </NavLink>
-                <NavLink className={navClass} to='/profile'>
-                  Profile
-                </NavLink>
-                <NavLink className={navClass} to='/change-password'>
-                  Password
-                </NavLink>
-              </>
-            )}
           </nav>
 
           <div className='ml-auto flex shrink-0 items-center gap-2'>

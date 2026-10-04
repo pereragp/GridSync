@@ -4,12 +4,32 @@ import { clearSession, getSession, saveSession } from "../api/client";
 
 const AuthContext = createContext(null);
 
+function isStaffRole(role) {
+  return role === "Backoffice" || role === "GridOperator";
+}
+
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(() => getSession());
+  const [session, setSession] = useState(() => {
+    const existing = getSession();
+    // Prosumer sessions are mobile-only — drop any leftover web session.
+    if (existing?.role === "Prosumer") {
+      clearSession();
+      return null;
+    }
+    return existing;
+  });
 
   const value = useMemo(() => {
     async function login(email, password) {
       const data = await authApi.login(email, password);
+      if (data.role === "Prosumer") {
+        throw new Error(
+          "Prosumer accounts sign in on the GridSync mobile app only. This web console is for Backoffice and Grid Operator staff.",
+        );
+      }
+      if (!isStaffRole(data.role)) {
+        throw new Error("This web console is for Backoffice and Grid Operator staff only.");
+      }
       const next = {
         token: data.token,
         userId: data.userId,
@@ -40,8 +60,7 @@ export function AuthProvider({ children }) {
     function homePathFor(role) {
       if (role === "Backoffice") return "/backoffice";
       if (role === "GridOperator") return "/operator";
-      if (role === "Prosumer") return "/prosumer";
-      return "/profile";
+      return "/login";
     }
 
     return {

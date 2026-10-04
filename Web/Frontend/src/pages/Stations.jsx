@@ -22,29 +22,15 @@ export default function Stations() {
   const isOperator = user.role === "GridOperator";
   const consoleLabel = isBackoffice
     ? "Backoffice console"
-    : isOperator
-      ? "Grid Operator"
-      : "Prosumer portal";
+    : "Grid Operator";
   const consoleBlurb = isBackoffice
     ? "Register solar microgrid nodes, set capacity, and maintain operational schedules across the network."
-    : isOperator
-      ? "View station schedules and update battery availability — close or reopen batteries for trading."
-      : "Browse hubs and battery availability before booking Charging or Drop-off energy.";
-  const pageTitle = isOperator
-    ? "Battery stations"
-    : isBackoffice
-      ? "Microgrid nodes"
-      : "Solar stations";
+    : "View station schedules and update battery availability — close or reopen batteries for trading.";
+  const pageTitle = isOperator ? "Battery stations" : "Microgrid nodes";
   const listSubtitle = isOperator
     ? "Open a station to view its schedule and manage battery availability."
-    : isBackoffice
-      ? "Create hubs, edit capacity and location, update schedules, or deactivate nodes when needed."
-      : "Search by name, code, or description. Open a station to view details.";
-  const openLabel = isOperator
-    ? "Manage batteries"
-    : isBackoffice
-      ? "Manage node"
-      : "Open";
+    : "Create hubs, edit capacity and location, update schedules, or deactivate nodes when needed.";
+  const openLabel = isOperator ? "Manage batteries" : "Manage node";
 
   const [stations, setStations] = useState([]);
   const [error, setError] = useState("");

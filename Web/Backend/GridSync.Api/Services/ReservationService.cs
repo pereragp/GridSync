@@ -87,22 +87,30 @@ public class ReservationService
         var stations = await _db.SolarStations
             .Find(s => stationIds.Contains(s.Id) && s.Status == StationStatus.Active)
             .ToListAsync();
-        var stationNames = stations.ToDictionary(s => s.Id, s => s.Name);
+        var stationById = stations.ToDictionary(s => s.Id);
 
         return slots
-            .Where(s => stationNames.ContainsKey(s.StationId))
-            .Select(s => new AvailableBookingSlotResponse
+            .Where(s => stationById.ContainsKey(s.StationId))
+            .Select(s =>
             {
-                Id = s.Id,
-                StationId = s.StationId,
-                StationName = stationNames[s.StationId],
-                BatteryIndex = s.BatteryIndex,
-                CapacityKwh = s.CapacityKwh,
-                ActualEnergyKwh = s.ActualEnergyKwh,
-                AvailableChargingKwh = AvailableCharging(s),
-                AvailableDropOffKwh = AvailableDropOff(s),
-                Status = s.Status,
-                Notes = s.Notes
+                var station = stationById[s.StationId];
+                var schedule = station.Schedule ?? new StationSchedule();
+                return new AvailableBookingSlotResponse
+                {
+                    Id = s.Id,
+                    StationId = s.StationId,
+                    StationName = station.Name,
+                    BatteryIndex = s.BatteryIndex,
+                    CapacityKwh = s.CapacityKwh,
+                    ActualEnergyKwh = s.ActualEnergyKwh,
+                    AvailableChargingKwh = AvailableCharging(s),
+                    AvailableDropOffKwh = AvailableDropOff(s),
+                    Status = s.Status,
+                    Notes = s.Notes,
+                    OpenTime = schedule.OpenTime,
+                    CloseTime = schedule.CloseTime,
+                    WorkingDays = schedule.WorkingDays ?? [],
+                };
             })
             .ToList();
     }
@@ -326,6 +334,13 @@ public class ReservationService
         ValidateVisitWindow(request.SlotStart, request.SlotEnd);
         ValidateEnergyAndType(request.ReservationType, request.EnergyKwh);
 
+        var station = await _db.SolarStations.Find(s => s.Id == reservation.StationId).FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Solar station not found.");
+
+        var slotStart = EnsureUtc(request.SlotStart);
+        var slotEnd = EnsureUtc(request.SlotEnd);
+        ValidateAgainstStationSchedule(station, slotStart, slotEnd);
+
         // Release old reserved amount, then reserve the new amount.
         await ReleaseReservedEnergyAsync(reservation);
 
@@ -341,8 +356,8 @@ public class ReservationService
 
         reservation.ReservationType = request.ReservationType;
         reservation.EnergyKwh = request.EnergyKwh;
-        reservation.SlotStart = EnsureUtc(request.SlotStart);
-        reservation.SlotEnd = EnsureUtc(request.SlotEnd);
+        reservation.SlotStart = slotStart;
+        reservation.SlotEnd = slotEnd;
         reservation.UpdatedAt = DateTime.UtcNow;
 
         await _db.EnergyReservations.ReplaceOneAsync(
@@ -428,6 +443,8 @@ public class ReservationService
 
         if (station.Status != StationStatus.Active)
             throw new InvalidOperationException("Solar station is inactive.");
+
+        ValidateAgainstStationSchedule(station, slotStart, slotEnd);
 
         var hasOverlap = await _db.EnergyReservations.Find(r =>
             r.SlotId == battery.Id &&
@@ -650,6 +667,109 @@ public class ReservationService
         if (end <= start)
             throw new InvalidOperationException("SlotEnd must be after SlotStart.");
     }
+
+    /// <summary>
+    /// Visit window must fall on a working day and inside open/close hours
+    /// (station wall-clock time in Asia/Colombo / Sri Lanka Standard Time).
+    /// </summary>
+    private static void ValidateAgainstStationSchedule(
+        SolarStation station,
+        DateTime slotStartUtc,
+        DateTime slotEndUtc)
+    {
+        var schedule = station.Schedule ?? new StationSchedule();
+        if (!TimeOnly.TryParse(schedule.OpenTime, out var open))
+            throw new InvalidOperationException("Station open time is invalid.");
+        if (!TimeOnly.TryParse(schedule.CloseTime, out var close))
+            throw new InvalidOperationException("Station close time is invalid.");
+        if (open >= close)
+            throw new InvalidOperationException("Station schedule is invalid (open must be before close).");
+
+        var workingDays = (schedule.WorkingDays ?? [])
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (workingDays.Count == 0)
+            throw new InvalidOperationException("Station has no working days configured.");
+
+        var zone = ResolveStationTimeZone();
+        var startLocal = TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(slotStartUtc), zone);
+        var endLocal = TimeZoneInfo.ConvertTimeFromUtc(EnsureUtc(slotEndUtc), zone);
+
+        if (startLocal.Date != endLocal.Date)
+        {
+            throw new InvalidOperationException(
+                "Visit window must stay on a single station working day " +
+                $"(hours {schedule.OpenTime}–{schedule.CloseTime}).");
+        }
+
+        var dayKey = ToDayAbbreviation(startLocal.DayOfWeek);
+        if (!workingDays.Contains(dayKey))
+        {
+            var days = string.Join(", ", workingDays.OrderBy(DaySortKey));
+            throw new InvalidOperationException(
+                $"Station is closed on {dayKey}. Working days: {days}.");
+        }
+
+        var startTime = TimeOnly.FromDateTime(startLocal);
+        var endTime = TimeOnly.FromDateTime(endLocal);
+
+        if (startTime < open || endTime > close)
+        {
+            throw new InvalidOperationException(
+                $"Visit must be within station hours {schedule.OpenTime}–{schedule.CloseTime} " +
+                $"(requested {startTime:HH:mm}–{endTime:HH:mm}).");
+        }
+    }
+
+    private static TimeZoneInfo ResolveStationTimeZone()
+    {
+        foreach (var id in new[] { "Asia/Colombo", "Sri Lanka Standard Time" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(id);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        // Fallback: fixed UTC+05:30 (Sri Lanka).
+        return TimeZoneInfo.CreateCustomTimeZone(
+            "GridSync-Colombo",
+            TimeSpan.FromHours(5.5),
+            "Sri Lanka",
+            "Sri Lanka");
+    }
+
+    private static string ToDayAbbreviation(DayOfWeek day) => day switch
+    {
+        DayOfWeek.Monday => "Mon",
+        DayOfWeek.Tuesday => "Tue",
+        DayOfWeek.Wednesday => "Wed",
+        DayOfWeek.Thursday => "Thu",
+        DayOfWeek.Friday => "Fri",
+        DayOfWeek.Saturday => "Sat",
+        DayOfWeek.Sunday => "Sun",
+        _ => day.ToString()[..3],
+    };
+
+    private static int DaySortKey(string day) => day.ToLowerInvariant() switch
+    {
+        "mon" => 1,
+        "tue" => 2,
+        "wed" => 3,
+        "thu" => 4,
+        "fri" => 5,
+        "sat" => 6,
+        "sun" => 7,
+        _ => 99,
+    };
 
     /// <summary>Free space still available to charge into the battery.</summary>
     private static double AvailableCharging(EnergyBookingSlot s) =>
