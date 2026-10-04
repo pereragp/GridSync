@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
@@ -80,7 +81,8 @@ fun LoginScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val authRepository = (LocalContext.current.applicationContext as? GridSyncApp)?.authRepository
+    val appContext = LocalContext.current.applicationContext
+    val authRepository = (appContext as? GridSyncApp)?.authRepository
 
     fun submit() {
         error = null
@@ -103,14 +105,17 @@ fun LoginScreen(
                 if (!allowed) {
                     repository.logoutLocal()
                     error = "This app supports Prosumer and Grid Operator accounts only. Your role is $role."
+                    appContext?.toast(error.orEmpty(), long = true)
                     loading = false
                     return@launch
                 }
                 loading = false
+                appContext?.toast("Signed in successfully.")
                 onLoginSuccess(role)
             } catch (e: Exception) {
                 loading = false
                 error = e.message ?: "Sign in failed"
+                appContext?.toast(error.orEmpty(), long = true)
             }
         }
     }

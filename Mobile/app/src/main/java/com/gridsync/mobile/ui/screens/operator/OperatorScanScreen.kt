@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.remote.dto.ReservationQrVerificationDto
 import com.gridsync.mobile.ui.components.QrCameraPreview
 import com.gridsync.mobile.ui.theme.Grid100
@@ -81,6 +82,7 @@ fun OperatorScanScreen(
         permissionRequested = true
         if (!granted) {
             error = "Camera permission is required to scan booking QR codes."
+            app.toast("Camera permission is required to scan QR codes.", long = true)
         }
     }
 
@@ -100,8 +102,10 @@ fun OperatorScanScreen(
             verified = null
             try {
                 verified = app.reservationRepository.verifyQr(payload)
+                app.toast("QR verified.")
             } catch (e: Exception) {
                 error = e.message ?: "QR verification failed"
+                app.toast(error.orEmpty(), long = true)
                 scanEnabled = true
             } finally {
                 verifying = false
@@ -248,11 +252,13 @@ fun OperatorScanScreen(
                             try {
                                 val completed = app.reservationRepository.complete(result.reservationId)
                                 val code = completed.reservationCode.ifBlank { completed.reservationId }
+                                app.toast("Transfer completed.")
                                 onTransferCompleted(
                                     "Transfer completed for $code. Battery inventory updated.",
                                 )
                             } catch (e: Exception) {
                                 error = e.message ?: "Completion failed"
+                                app.toast(error.orEmpty(), long = true)
                             } finally {
                                 completing = false
                             }
