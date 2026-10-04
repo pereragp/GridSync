@@ -114,12 +114,12 @@ fun OperatorScanScreen() {
         scanEnabled = true
     }
 
+    // Keep the live camera outside verticalScroll — scrolling breaks CameraX analysis.
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Grid50)
             .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         Text(
@@ -156,6 +156,7 @@ fun OperatorScanScreen() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White)
                         .border(1.dp, Grid100, RoundedCornerShape(16.dp))
@@ -164,7 +165,7 @@ fun OperatorScanScreen() {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(360.dp),
+                            .weight(1f),
                         contentAlignment = Alignment.Center,
                     ) {
                         QrCameraPreview(
@@ -206,10 +207,11 @@ fun OperatorScanScreen() {
         }
 
         verified?.let { result ->
-            Spacer(modifier = Modifier.height(16.dp))
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color.White)
                     .border(1.dp, Grid100, RoundedCornerShape(16.dp))

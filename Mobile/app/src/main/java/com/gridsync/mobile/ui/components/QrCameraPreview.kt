@@ -7,7 +7,6 @@ import androidx.camera.core.Preview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -16,7 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +30,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import com.gridsync.mobile.ui.theme.Grid100
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -42,51 +45,39 @@ fun QrCameraPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val handled = remember { AtomicBoolean(false) }
-    val previewView = remember {
-        PreviewView(context).apply {
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-        }
-    }
-    // Keep callback fresh without rebinding camera.
     val callbackRef = remember { object { var value: (String) -> Unit = onQrDetected } }
     callbackRef.value = onQrDetected
 
-    DisposableEffect(enabled, lifecycleOwner) {
+    var previewView by remember { mutableStateOf<PreviewView?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { analysisExecutor.shutdown() }
+    }
+
+    DisposableEffect(enabled, lifecycleOwner, previewView) {
+        val view = previewView
+        if (view == null) {
+            return@DisposableEffect onDispose { }
+        }
+
         handled.set(false)
         val mainExecutor = ContextCompat.getMainExecutor(context)
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        var boundProvider: ProcessCameraProvider? = null
+        var cameraProvider: ProcessCameraProvider? = null
 
-        val bindListener = Runnable {
-            val cameraProvider = cameraProviderFuture.get()
-            boundProvider = cameraProvider
-            cameraProvider.unbindAll()
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = BarcodeScanning.getClient(options)
+
+        val bindRunnable = Runnable {
+            val provider = cameraProviderFuture.get()
+            cameraProvider = provider
+            provider.unbindAll()
             if (!enabled) return@Runnable
 
             val preview = Preview.Builder().build().also {
-                it.surfaceProvider = previewView.surfaceProvider
-            }
-
-            val options = BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build()
-            val scanner = BarcodeScanning.getClient(options)
-
-            val analyzer = MlKitAnalyzer(
-                listOf(scanner),
-                ImageAnalysis.COORDINATE_SYSTEM_VIEW_REFERENCED,
-                mainExecutor,
-            ) { result ->
-                if (!enabled || handled.get()) return@MlKitAnalyzer
-                val payload = result?.getValue(scanner)
-                    .orEmpty()
-                    .asSequence()
-                    .mapNotNull { it.rawValue?.trim() }
-                    .firstOrNull { it.isNotBlank() }
-                if (payload != null && handled.compareAndSet(false, true)) {
-                    callbackRef.value(payload)
-                }
+                it.surfaceProvider = view.surfaceProvider
             }
 
             val analysis = ImageAnalysis.Builder()
@@ -102,10 +93,44 @@ fun QrCameraPreview(
                         .build(),
                 )
                 .build()
-                .also { it.setAnalyzer(analysisExecutor, analyzer) }
+
+            analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                if (!enabled || handled.get()) {
+                    imageProxy.close()
+                    return@setAnalyzer
+                }
+
+                val mediaImage = imageProxy.image
+                if (mediaImage == null) {
+                    imageProxy.close()
+                    return@setAnalyzer
+                }
+
+                val input = InputImage.fromMediaImage(
+                    mediaImage,
+                    imageProxy.imageInfo.rotationDegrees,
+                )
+
+                scanner.process(input)
+                    .addOnSuccessListener { barcodes ->
+                        if (!enabled || handled.get()) return@addOnSuccessListener
+                        val payload = barcodes
+                            .asSequence()
+                            .mapNotNull { it.rawValue?.trim() }
+                            .firstOrNull { it.isNotBlank() }
+                        if (payload != null && handled.compareAndSet(false, true)) {
+                            mainExecutor.execute {
+                                callbackRef.value(payload)
+                            }
+                        }
+                    }
+                    .addOnCompleteListener {
+                        imageProxy.close()
+                    }
+            }
 
             runCatching {
-                cameraProvider.bindToLifecycle(
+                provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
@@ -114,21 +139,32 @@ fun QrCameraPreview(
             }
         }
 
-        cameraProviderFuture.addListener(bindListener, mainExecutor)
+        // Wait until PreviewView is attached so analysis frames actually flow.
+        val attachAndBind = {
+            if (view.isAttachedToWindow) {
+                cameraProviderFuture.addListener(bindRunnable, mainExecutor)
+            } else {
+                view.addOnAttachStateChangeListener(object : android.view.View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: android.view.View) {
+                        view.removeOnAttachStateChangeListener(this)
+                        cameraProviderFuture.addListener(bindRunnable, mainExecutor)
+                    }
+
+                    override fun onViewDetachedFromWindow(v: android.view.View) = Unit
+                })
+            }
+        }
+        attachAndBind()
 
         onDispose {
-            runCatching { boundProvider?.unbindAll() }
-            // If bind hadn't finished, still try current provider.
+            runCatching { cameraProvider?.unbindAll() }
             runCatching {
                 if (cameraProviderFuture.isDone) {
                     cameraProviderFuture.get().unbindAll()
                 }
             }
+            scanner.close()
         }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { analysisExecutor.shutdown() }
     }
 
     Box(
@@ -138,8 +174,19 @@ fun QrCameraPreview(
         contentAlignment = Alignment.Center,
     ) {
         AndroidView(
-            factory = { previewView },
+            factory = { ctx ->
+                PreviewView(ctx).apply {
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    previewView = this
+                }
+            },
             modifier = Modifier.fillMaxSize(),
+            update = { view ->
+                if (previewView !== view) {
+                    previewView = view
+                }
+            },
         )
         Box(
             modifier = Modifier
