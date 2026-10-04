@@ -17,9 +17,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +50,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.gridsync.mobile.GridSyncApp
 import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
@@ -59,7 +59,6 @@ import com.gridsync.mobile.ui.theme.ErrorRed50
 import com.gridsync.mobile.ui.theme.ErrorRed800
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
-import com.gridsync.mobile.ui.theme.Grid500
 import com.gridsync.mobile.ui.theme.Grid600
 import com.gridsync.mobile.ui.theme.Grid700
 import com.gridsync.mobile.ui.theme.Grid900
@@ -70,7 +69,6 @@ import com.gridsync.mobile.ui.theme.Slate600
 import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -88,10 +86,13 @@ fun RegisterScreen(
     var success by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val authRepository = (LocalContext.current.applicationContext as? GridSyncApp)?.authRepository
 
     fun submit() {
         error = null
+        val repository = authRepository
         when {
+            repository == null -> error = "App is not ready. Restart and try again."
             nic.isBlank() -> error = "NIC is required"
             fullName.isBlank() -> error = "Full name is required"
             email.isBlank() -> error = "Email is required"
@@ -101,11 +102,22 @@ fun RegisterScreen(
                 error = "Password needs at least one letter and one number"
             else -> {
                 loading = true
-                // Frontend-only stub — wire to API later
                 scope.launch {
-                    delay(900)
-                    loading = false
-                    success = true
+                    try {
+                        repository.registerProsumer(
+                            nic = nic,
+                            fullName = fullName,
+                            email = email,
+                            phone = phone,
+                            password = password,
+                            address = address,
+                        )
+                        loading = false
+                        success = true
+                    } catch (e: Exception) {
+                        loading = false
+                        error = e.message ?: "Registration failed"
+                    }
                 }
             }
         }
@@ -197,44 +209,6 @@ private fun RegisterBrandColumn() {
                 fontFamily = SourceSerifFontFamily,
                 fontWeight = FontWeight.SemiBold,
             ),
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "Register with your NIC to reserve Charging and Drop-off slots once Backoffice activates your account.",
-            color = Grid100.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        BenefitRow("NIC is your primary account key")
-        Spacer(modifier = Modifier.height(8.dp))
-        BenefitRow("Status starts as Pending after signup")
-        Spacer(modifier = Modifier.height(8.dp))
-        BenefitRow("Book energy slots after approval")
-    }
-}
-
-@Composable
-private fun BenefitRow(text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(Grid500.copy(alpha = 0.35f))
-                .border(1.dp, Grid100.copy(alpha = 0.35f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "✓",
-                color = Grid100,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = text,
-            color = Grid100.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }

@@ -138,6 +138,20 @@ npm run dev
 
 App: `http://localhost:5173`
 
+### 4. Android mobile (prosumer)
+
+```bash
+cd Mobile
+```
+
+Add your Maps SDK key to `local.properties` (see `local.properties.example`):
+
+```properties
+MAPS_API_KEY=your_google_maps_android_api_key_here
+```
+
+Enable **Maps SDK for Android** for that key in Google Cloud Console. Then open the project in Android Studio and run on an emulator/device with Google Play services. The Home tab loads nearby stations from `GET /api/stations/nearby` onto Google Maps (Colombo fallback if location is denied).
+
 ---
 
 ## API overview

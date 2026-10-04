@@ -140,7 +140,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Skip HTTPS redirect in Development so the Android emulator can call plain HTTP.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
