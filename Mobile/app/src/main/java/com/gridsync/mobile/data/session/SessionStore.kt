@@ -49,6 +49,22 @@ class SessionStore(context: Context) {
         clearLegacyPrefs()
     }
 
+    /** Refresh cached display fields after a profile update (SQLite + in-memory cache). */
+    fun updateProfile(
+        fullName: String? = null,
+        status: String? = null,
+        nic: String? = null,
+    ) {
+        val current = cached ?: return
+        val updated = current.copy(
+            fullName = fullName ?: current.fullName,
+            status = status ?: current.status,
+            nic = nic ?: current.nic,
+        )
+        dao.upsert(updated)
+        cached = updated
+    }
+
     /**
      * One-time move from the old SharedPreferences session store into SQLite,
      * so already-logged-in installs keep working after the upgrade.
