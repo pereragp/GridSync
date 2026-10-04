@@ -19,3 +19,18 @@ val Slate900 = Color(0xFF0F172A)
 val ErrorRed50 = Color(0xFFFEF2F2)
 val ErrorRed200 = Color(0xFFFECACA)
 val ErrorRed800 = Color(0xFF991B1B)
+
+val Amber50 = Color(0xFFFFFBEB)
+val Amber200 = Color(0xFFFDE68A)
+val Amber400 = Color(0xFFFBBF24)
+val Amber800 = Color(0xFF92400E)
+val Amber950 = Color(0xFF451A03)
+
+val Sky50 = Color(0xFFF0F9FF)
+val Sky200 = Color(0xFFBAE6FD)
+val Sky800 = Color(0xFF075985)
+
+val Emerald50 = Color(0xFFECFDF5)
+val Emerald200 = Color(0xFFA7F3D0)
+val Emerald500 = Color(0xFF10B981)
+val Emerald900 = Color(0xFF064E3B)

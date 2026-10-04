@@ -9,6 +9,14 @@ import com.gridsync.mobile.data.remote.toUserMessage
 class StationRepository(
     private val stationsApi: StationsApi,
 ) {
+    suspend fun getAll(): List<StationResponseDto> {
+        try {
+            return stationsApi.getAll()
+        } catch (e: Exception) {
+            throw ApiException(e.toUserMessage())
+        }
+    }
+
     suspend fun getNearby(
         latitude: Double,
         longitude: Double,
