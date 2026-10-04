@@ -47,6 +47,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -760,69 +763,123 @@ private fun NearbyStationRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val shape = RoundedCornerShape(18.dp)
+    val hasSlots = station.availableSlots > 0
+    val isActive = station.status.equals("Active", ignoreCase = true)
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) Grid100.copy(alpha = 0.55f) else Color.White)
+            .shadow(if (selected) 6.dp else 2.dp, shape, ambientColor = Grid700, spotColor = Grid700)
+            .clip(shape)
+            .background(if (selected) Grid50 else Color.White)
             .border(
-                width = 1.dp,
-                color = if (selected) Grid500.copy(alpha = 0.45f) else Grid100,
-                shape = RoundedCornerShape(14.dp),
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) Grid600 else Grid100,
+                shape = shape,
             )
             .clickable(onClick = onClick)
-            .padding(14.dp)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        // Distance badge
+        Column(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Brush.linearGradient(listOf(Grid800, Grid500))),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = station.name,
-                    color = Slate900,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = station.code,
-                    color = Slate600,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
             Text(
-                text = String.format("%.1f km", station.distanceKm),
-                color = Grid700,
-                style = MaterialTheme.typography.labelLarge,
+                text = String.format("%.1f", station.distanceKm),
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Text(
+                text = "km away",
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
             )
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        HorizontalDivider(color = Color(0xFFE2E8F0))
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "${station.availableSlots} slots",
-                color = Slate700,
+                text = station.name,
+                color = Slate900,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = station.code,
+                color = Slate600,
                 style = MaterialTheme.typography.bodySmall,
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Grid100)
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
+                StationChip(
+                    text = if (hasSlots) "${station.availableSlots} slots free" else "No slots",
+                    background = if (hasSlots) Grid100 else Color(0xFFFEF3C7),
+                    content = if (hasSlots) Grid800 else Color(0xFF92400E),
+                )
+                StationChip(
                     text = station.status,
-                    color = Grid700,
-                    style = MaterialTheme.typography.labelMedium,
+                    background = if (isActive) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                    content = if (isActive) Color(0xFF166534) else Slate700,
+                    dot = true,
                 )
             }
         }
+
+        Text(
+            text = "›",
+            color = if (selected) Grid700 else Slate600,
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun StationChip(
+    text: String,
+    background: Color,
+    content: Color,
+    dot: Boolean = false,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (dot) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(content)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+        }
+        Text(
+            text = text,
+            color = content,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 
