@@ -84,7 +84,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
                 "http://localhost:5174",
-                "http://127.0.0.1:5174")
+                "http://127.0.0.1:5174",
+                "https://gridsyncweb.netlify.app")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -140,12 +141,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// CORS must run before HTTPS redirection so OPTIONS preflight gets Allow-Origin headers.
 // Skip HTTPS redirect in Development so the Android emulator can call plain HTTP.
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
 app.UseCors("Frontend");
+app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

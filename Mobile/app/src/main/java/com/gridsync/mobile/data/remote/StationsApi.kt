@@ -7,6 +7,9 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface StationsApi {
+    @GET("api/stations")
+    suspend fun getAll(): List<StationResponseDto>
+
     @GET("api/stations/nearby")
     suspend fun getNearby(
         @Query("lat") lat: Double,
