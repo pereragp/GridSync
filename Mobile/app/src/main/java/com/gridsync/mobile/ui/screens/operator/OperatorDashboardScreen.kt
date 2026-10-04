@@ -348,16 +348,7 @@ private fun OperatorHero(
                     color = Grid100.copy(alpha = 0.88f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Battery stations →",
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenStations)
-                        .padding(vertical = 4.dp),
-                )
+
             }
         }
     }
