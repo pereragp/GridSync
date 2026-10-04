@@ -38,6 +38,9 @@ data class AvailableBookingSlotDto(
     val availableDropOffKwh: Double = 0.0,
     val status: String = "",
     val notes: String? = null,
+    val openTime: String = "08:00",
+    val closeTime: String = "18:00",
+    val workingDays: List<String> = emptyList(),
 )
 
 data class CreateReservationRequestDto(

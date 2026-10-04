@@ -13,10 +13,7 @@ import Login from "./pages/Login";
 import OperatorHome from "./pages/OperatorHome";
 import OperatorReservations from "./pages/OperatorReservations";
 import Profile from "./pages/Profile";
-import ProsumerHome from "./pages/ProsumerHome";
-import RegisterProsumer from "./pages/RegisterProsumer";
 import ResetPassword from "./pages/ResetPassword";
-import Reservations from "./pages/Reservations";
 import StationDetail from "./pages/StationDetail";
 import Stations from "./pages/Stations";
 
@@ -28,7 +25,7 @@ export default function App() {
         <Routes>
           <Route element={<PublicOnlyRoute />}>
             <Route path='/login' element={<Login />} />
-            <Route path='/register' element={<RegisterProsumer />} />
+            <Route path='/register' element={<Navigate to='/login' replace />} />
             <Route path='/forgot-password' element={<ForgotPassword />} />
             <Route path='/reset-password' element={<ResetPassword />} />
           </Route>
@@ -39,25 +36,14 @@ export default function App() {
               </Route>
               <Route
                 element={
-                  <ProtectedRoute
-                    roles={["Backoffice", "GridOperator", "Prosumer"]}
-                  />
+                  <ProtectedRoute roles={["Backoffice", "GridOperator"]} />
                 }
               >
                 <Route path="/stations" element={<Stations />} />
                 <Route path="/stations/:id" element={<StationDetail />} />
               </Route>
-              <Route element={<ProtectedRoute roles={["Prosumer"]} />}>
-                <Route path="/prosumer" element={<ProsumerHome />} />
-              </Route>
               <Route path='/profile' element={<Profile />} />
               <Route path='/change-password' element={<ChangePassword />} />
-              <Route
-                path='/reservations'
-                element={<ProtectedRoute roles={['Prosumer']} />}
-              >
-                <Route index element={<Reservations />} />
-              </Route>
               <Route
                 path="/backoffice"
                 element={<ProtectedRoute roles={["Backoffice"]} />}
@@ -79,6 +65,8 @@ export default function App() {
               </Route>
             </Route>
           </Route>
+          <Route path='/prosumer' element={<Navigate to='/login' replace />} />
+          <Route path='/reservations' element={<Navigate to='/login' replace />} />
           <Route path='*' element={<Navigate to='/login' replace />} />
         </Routes>
         </FeedbackProvider>
