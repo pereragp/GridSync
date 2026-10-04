@@ -249,8 +249,25 @@ fun GridSyncNavHost(
                     },
                 )
             }
-            composable(AppRoutes.OperatorBookings) {
+            composable(
+                route = AppRoutes.OperatorBookings,
+                arguments = listOf(
+                    navArgument("status") {
+                        type = NavType.StringType
+                        defaultValue = "Pending"
+                    },
+                    navArgument("successMessage") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                        nullable = true
+                    },
+                ),
+            ) { entry ->
+                val status = entry.arguments?.getString("status") ?: "Pending"
+                val successMessage = entry.arguments?.getString("successMessage").orEmpty()
                 OperatorBookingsScreen(
+                    initialStatus = status,
+                    successMessage = successMessage,
                     onBookingClick = { reservation ->
                         navController.navigate(AppRoutes.operatorBookingDetail(reservation.id))
                     },
@@ -287,7 +304,21 @@ fun GridSyncNavHost(
                 )
             }
             composable(AppRoutes.OperatorScan) {
-                OperatorScanScreen()
+                OperatorScanScreen(
+                    onTransferCompleted = { successMessage ->
+                        navController.navigate(
+                            AppRoutes.operatorBookings(
+                                status = "Completed",
+                                successMessage = successMessage,
+                            ),
+                        ) {
+                            popUpTo(AppRoutes.OperatorDashboard) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                        }
+                    },
+                )
             }
             composable(AppRoutes.OperatorProfile) {
                 ProfileScreen(

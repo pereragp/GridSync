@@ -42,7 +42,7 @@ enum class OperatorTab(
     ),
     Bookings(
         label = "Bookings",
-        route = AppRoutes.OperatorBookings,
+        route = AppRoutes.operatorBookings(),
         selectedIcon = Icons.AutoMirrored.Filled.ReceiptLong,
         unselectedIcon = Icons.AutoMirrored.Outlined.ReceiptLong,
     ),
@@ -70,6 +70,7 @@ fun operatorBottomBarVisibleFor(route: String?): Boolean {
     if (route == null) return false
     return route == AppRoutes.OperatorDashboard ||
         route == AppRoutes.OperatorBookings ||
+        route.startsWith("operator_bookings?") ||
         route == AppRoutes.OperatorStations ||
         route == AppRoutes.OperatorScan ||
         route == AppRoutes.OperatorProfile
@@ -79,7 +80,9 @@ fun selectedOperatorTabFor(route: String?): OperatorTab? {
     if (route == null) return null
     return when {
         route == AppRoutes.OperatorDashboard -> OperatorTab.Home
-        route == AppRoutes.OperatorBookings || route.startsWith("operator_bookings/") -> OperatorTab.Bookings
+        route == AppRoutes.OperatorBookings ||
+            route.startsWith("operator_bookings?") ||
+            route.startsWith("operator_bookings/") -> OperatorTab.Bookings
         route == AppRoutes.OperatorStations || route.startsWith("operator_stations/") -> OperatorTab.Stations
         route == AppRoutes.OperatorScan -> OperatorTab.Scan
         route == AppRoutes.OperatorProfile -> OperatorTab.Profile
