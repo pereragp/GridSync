@@ -34,6 +34,7 @@ import com.gridsync.mobile.ui.screens.operator.OperatorStationsScreen
 import com.gridsync.mobile.ui.screens.profile.ProfileScreen
 import com.gridsync.mobile.ui.screens.register.RegisterScreen
 import com.gridsync.mobile.ui.screens.reservation.CreateReservationScreen
+import com.gridsync.mobile.ui.screens.splash.SplashScreen
 import com.gridsync.mobile.ui.screens.station.StationDetailScreen
 
 @Composable
@@ -42,13 +43,7 @@ fun GridSyncNavHost(
     navController: NavHostController = rememberNavController(),
 ) {
     val app = LocalContext.current.applicationContext as GridSyncApp
-    val startDestination = remember {
-        if (app.sessionStore.isLoggedIn) {
-            AppRoutes.homeForRole(app.sessionStore.getSession()?.role)
-        } else {
-            AppRoutes.Login
-        }
-    }
+    val startDestination = AppRoutes.Splash
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val sessionRole = app.sessionStore.getSession()?.role
@@ -57,7 +52,8 @@ fun GridSyncNavHost(
     val showOperatorBottomBar = isOperator && operatorBottomBarVisibleFor(currentRoute)
 
     val lightSystemBars = when {
-        currentRoute == AppRoutes.Login ||
+        currentRoute == AppRoutes.Splash ||
+            currentRoute == AppRoutes.Login ||
             currentRoute == AppRoutes.Register ||
             currentRoute == AppRoutes.ForgotPassword ||
             currentRoute?.startsWith("reset_password") == true -> false
@@ -95,6 +91,20 @@ fun GridSyncNavHost(
             startDestination = startDestination,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
+            composable(AppRoutes.Splash) {
+                SplashScreen(
+                    onFinished = {
+                        val destination = if (app.sessionStore.isLoggedIn) {
+                            AppRoutes.homeForRole(app.sessionStore.getSession()?.role)
+                        } else {
+                            AppRoutes.Login
+                        }
+                        navController.navigate(destination) {
+                            popUpTo(AppRoutes.Splash) { inclusive = true }
+                        }
+                    },
+                )
+            }
             composable(AppRoutes.Login) {
                 LoginScreen(
                     onForgotPassword = {
