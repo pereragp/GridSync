@@ -1,6 +1,7 @@
 package com.gridsync.mobile.data.session
 
 import android.content.Context
+import com.gridsync.mobile.data.local.UserSessionDao
 
 data class UserSession(
     val token: String,
@@ -13,18 +14,49 @@ data class UserSession(
     val expiresAt: String?,
 )
 
+/**
+ * Persists the authenticated user session in local SQLite.
+ * Login still requires the network API — this only caches the session after success.
+ */
 class SessionStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val dao = UserSessionDao(appContext)
+
+    @Volatile
+    private var cached: UserSession? = null
+
+    init {
+        cached = dao.getCurrent() ?: migrateFromLegacyPrefs()
+    }
 
     val token: String?
-        get() = prefs.getString(KEY_TOKEN, null)
+        get() = cached?.token
 
     val isLoggedIn: Boolean
         get() = !token.isNullOrBlank()
 
-    fun getSession(): UserSession? {
-        val token = token ?: return null
-        return UserSession(
+    fun getSession(): UserSession? = cached
+
+    fun save(session: UserSession) {
+        dao.upsert(session)
+        cached = session
+        clearLegacyPrefs()
+    }
+
+    fun clear() {
+        dao.clear()
+        cached = null
+        clearLegacyPrefs()
+    }
+
+    /**
+     * One-time move from the old SharedPreferences session store into SQLite,
+     * so already-logged-in installs keep working after the upgrade.
+     */
+    private fun migrateFromLegacyPrefs(): UserSession? {
+        val prefs = appContext.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+        val token = prefs.getString(KEY_TOKEN, null)?.takeIf { it.isNotBlank() } ?: return null
+        val session = UserSession(
             token = token,
             userId = prefs.getString(KEY_USER_ID, "").orEmpty(),
             fullName = prefs.getString(KEY_FULL_NAME, "").orEmpty(),
@@ -34,27 +66,20 @@ class SessionStore(context: Context) {
             nic = prefs.getString(KEY_NIC, null),
             expiresAt = prefs.getString(KEY_EXPIRES_AT, null),
         )
+        dao.upsert(session)
+        prefs.edit().clear().apply()
+        return session
     }
 
-    fun save(session: UserSession) {
-        prefs.edit()
-            .putString(KEY_TOKEN, session.token)
-            .putString(KEY_USER_ID, session.userId)
-            .putString(KEY_FULL_NAME, session.fullName)
-            .putString(KEY_EMAIL, session.email)
-            .putString(KEY_ROLE, session.role)
-            .putString(KEY_STATUS, session.status)
-            .putString(KEY_NIC, session.nic)
-            .putString(KEY_EXPIRES_AT, session.expiresAt)
+    private fun clearLegacyPrefs() {
+        appContext.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
             .apply()
     }
 
-    fun clear() {
-        prefs.edit().clear().apply()
-    }
-
     companion object {
-        private const val PREFS = "gridsync_session"
+        private const val LEGACY_PREFS = "gridsync_session"
         private const val KEY_TOKEN = "token"
         private const val KEY_USER_ID = "userId"
         private const val KEY_FULL_NAME = "fullName"
