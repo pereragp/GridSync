@@ -53,7 +53,9 @@ import com.gridsync.mobile.ui.util.reservationTypeLabel
 import kotlinx.coroutines.launch
 
 @Composable
-fun OperatorScanScreen() {
+fun OperatorScanScreen(
+    onTransferCompleted: (successMessage: String) -> Unit = {},
+) {
     val context = LocalContext.current
     val app = context.applicationContext as GridSyncApp
     val scope = rememberCoroutineScope()
@@ -245,10 +247,10 @@ fun OperatorScanScreen() {
                             message = null
                             try {
                                 val completed = app.reservationRepository.complete(result.reservationId)
-                                message =
-                                    "Completed ${completed.reservationCode.ifBlank { completed.reservationId }}. Battery inventory updated."
-                                verified = null
-                                scanEnabled = true
+                                val code = completed.reservationCode.ifBlank { completed.reservationId }
+                                onTransferCompleted(
+                                    "Transfer completed for $code. Battery inventory updated.",
+                                )
                             } catch (e: Exception) {
                                 error = e.message ?: "Completion failed"
                             } finally {
