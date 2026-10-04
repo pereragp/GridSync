@@ -73,7 +73,6 @@ import com.gridsync.mobile.data.station.StationRepository
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
-import com.gridsync.mobile.ui.data.MockReservationRepository
 import com.gridsync.mobile.ui.data.MockStationRepository
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
@@ -137,8 +136,6 @@ private fun NearbyStationResponseDto.toUi() = NearbyStationUi(
 @Composable
 fun ProsumerDashboardScreen(
     userName: String = "Prosumer",
-    pendingCount: Int = MockReservationRepository.pendingCount(),
-    activeCount: Int = MockReservationRepository.approvedCount(),
     onBookEnergy: () -> Unit = {},
     onMyBookings: () -> Unit = {},
     onStationClick: (NearbyStationUi) -> Unit = {},
@@ -163,6 +160,23 @@ fun ProsumerDashboardScreen(
     var cameraFocus by remember { mutableStateOf<MapCameraFocus>(MapCameraFocus.FitAll) }
     var reloadToken by remember { mutableStateOf(0) }
     var didRequestPermission by remember { mutableStateOf(false) }
+    var pendingCount by remember { mutableStateOf(0) }
+    var activeCount by remember { mutableStateOf(0) }
+    var statsLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        statsLoading = true
+        try {
+            val stats = app.reservationRepository.getProsumerDashboardStats()
+            pendingCount = stats.pendingReservations.toInt()
+            activeCount = stats.activeReservations.toInt()
+        } catch (_: Exception) {
+            pendingCount = 0
+            activeCount = 0
+        } finally {
+            statsLoading = false
+        }
+    }
 
     fun loadNearby() {
         scope.launch {
@@ -328,7 +342,7 @@ fun ProsumerDashboardScreen(
                 ) {
                     StatCard(
                         label = "Pending",
-                        value = pendingCount.toString(),
+                        value = if (statsLoading) "…" else pendingCount.toString(),
                         hint = "Awaiting review",
                         modifier = Modifier
                             .weight(1f)
@@ -336,7 +350,7 @@ fun ProsumerDashboardScreen(
                     )
                     StatCard(
                         label = "Active",
-                        value = activeCount.toString(),
+                        value = if (statsLoading) "…" else activeCount.toString(),
                         hint = "Approved bookings",
                         modifier = Modifier
                             .weight(1f)
