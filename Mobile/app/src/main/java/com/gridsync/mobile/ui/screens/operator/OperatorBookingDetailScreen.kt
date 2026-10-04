@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.remote.dto.ReservationDto
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
@@ -204,9 +205,11 @@ fun OperatorBookingDetailScreen(
                                     try {
                                         app.reservationRepository.approve(item.id)
                                         message = "Approved — QR is ready for the prosumer."
+                                        app.toast("Booking approved. QR issued.")
                                         reloadToken += 1
                                     } catch (e: Exception) {
                                         error = e.message ?: "Approval failed"
+                                        app.toast(error.orEmpty(), long = true)
                                     } finally {
                                         busy = false
                                     }
@@ -288,9 +291,11 @@ fun OperatorBookingDetailScreen(
                     try {
                         app.reservationRepository.reject(target.id, reason)
                         message = "Booking rejected."
+                        app.toast("Booking rejected.")
                         reloadToken += 1
                     } catch (e: Exception) {
                         error = e.message ?: "Rejection failed"
+                        app.toast(error.orEmpty(), long = true)
                     } finally {
                         busy = false
                     }

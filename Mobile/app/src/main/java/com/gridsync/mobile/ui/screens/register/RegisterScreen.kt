@@ -51,6 +51,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.ui.components.AuthHeroBackground
 import com.gridsync.mobile.ui.components.BrandLogo
 import com.gridsync.mobile.ui.components.BrandLogoVariant
@@ -86,7 +87,8 @@ fun RegisterScreen(
     var success by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val authRepository = (LocalContext.current.applicationContext as? GridSyncApp)?.authRepository
+    val appContext = LocalContext.current.applicationContext
+    val authRepository = (appContext as? GridSyncApp)?.authRepository
 
     fun submit() {
         error = null
@@ -114,9 +116,11 @@ fun RegisterScreen(
                         )
                         loading = false
                         success = true
+                        appContext.toast("Registration submitted. Awaiting approval.", long = true)
                     } catch (e: Exception) {
                         loading = false
                         error = e.message ?: "Registration failed"
+                        appContext.toast(error.orEmpty(), long = true)
                     }
                 }
             }

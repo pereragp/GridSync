@@ -55,6 +55,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.remote.dto.AvailableBookingSlotDto
 import com.gridsync.mobile.data.remote.dto.StationScheduleDto
 import com.gridsync.mobile.ui.theme.ErrorRed200
@@ -156,6 +157,7 @@ fun CreateReservationScreen(
                 }
             } catch (e: Exception) {
                 slotsError = e.message ?: "Could not load available batteries"
+                app.toast(slotsError.orEmpty(), long = true)
                 slots = emptyList()
             } finally {
                 loadingSlots = false
@@ -283,8 +285,10 @@ fun CreateReservationScreen(
                 )
                 createdCode = created.reservationCode.ifBlank { null }
                 success = true
+                app.toast("Reservation submitted for approval.")
             } catch (e: Exception) {
                 error = e.message ?: "Could not create reservation"
+                app.toast(error.orEmpty(), long = true)
             } finally {
                 loading = false
             }
@@ -431,6 +435,7 @@ fun CreateReservationScreen(
                         availableForType = availableForType,
                         batterySelected = batteryId.isNotBlank(),
                         visitStart = visitStart,
+                        visitEnd = visitEnd,
                         schedule = schedule,
                         onVisitStartChange = {
                             visitStart = it
@@ -716,6 +721,7 @@ private fun StepDetailsContent(
     availableForType: Double,
     batterySelected: Boolean,
     visitStart: String,
+    visitEnd: String,
     schedule: StationScheduleDto?,
     onVisitStartChange: (String) -> Unit,
     onVisitEndChange: (String) -> Unit,
@@ -786,6 +792,7 @@ private fun StepDetailsContent(
     Spacer(modifier = Modifier.height(8.dp))
     VisitSchedulePicker(
         visitStart = visitStart,
+        visitEnd = visitEnd,
         schedule = schedule,
         onChange = { start, end ->
             onVisitStartChange(start)
@@ -1206,6 +1213,7 @@ private fun formatOperatingHours(schedule: StationScheduleDto): String? {
 @Composable
 private fun VisitSchedulePicker(
     visitStart: String,
+    visitEnd: String,
     schedule: StationScheduleDto?,
     onChange: (start: String, end: String) -> Unit,
 ) {
@@ -1215,7 +1223,12 @@ private fun VisitSchedulePicker(
     val selectedStart = remember(visitStart) {
         runCatching { LocalDateTime.parse(visitStart.trim().replace(' ', 'T')) }.getOrNull()
     }
+    val selectedEnd = remember(visitEnd) {
+        runCatching { LocalDateTime.parse(visitEnd.trim().replace(' ', 'T')) }.getOrNull()
+    }
     var selectedDate by remember { mutableStateOf(selectedStart?.toLocalDate() ?: today) }
+    // True after the first tap, while the user may still extend the booking with a second tap.
+    var pickingEnd by remember { mutableStateOf(false) }
 
     val dateStripScroll = rememberScrollState()
     val density = LocalDensity.current
@@ -1247,6 +1260,7 @@ private fun VisitSchedulePicker(
                     )
                     .clickable(enabled = dayOpen) {
                         selectedDate = date
+                        pickingEnd = false
                         val current = LocalDateTime.now()
                         val kept = selectedStart?.hour?.let { date.atTime(it, 0) }
                         val pick = if (kept != null && isBookableSlot(kept, current, schedule)) {
@@ -1288,7 +1302,7 @@ private fun VisitSchedulePicker(
     }
 
     Spacer(modifier = Modifier.height(12.dp))
-    FieldLabel("Time slot (1 hour)")
+    FieldLabel("Time slot")
     schedule?.let { formatOperatingHours(it) }?.let {
         Text(
             text = it,
@@ -1338,7 +1352,8 @@ private fun VisitSchedulePicker(
                 hours.forEach { hour ->
                     val slotStart = selectedDate.atTime(hour, 0)
                     val enabled = isBookableSlot(slotStart, now, schedule)
-                    val selected = selectedStart == slotStart
+                    val selected = selectedStart != null && selectedEnd != null &&
+                        !slotStart.isBefore(selectedStart) && slotStart.isBefore(selectedEnd)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -1357,10 +1372,22 @@ private fun VisitSchedulePicker(
                                 RoundedCornerShape(10.dp),
                             )
                             .clickable(enabled = enabled) {
-                                onChange(
-                                    slotStart.format(PickerValueFormatter),
-                                    slotStart.plusHours(1).format(PickerValueFormatter),
-                                )
+                                val start = selectedStart
+                                if (pickingEnd && start != null && !slotStart.isBefore(start)) {
+                                    // Second tap: extend the booking through this hour.
+                                    onChange(
+                                        start.format(PickerValueFormatter),
+                                        slotStart.plusHours(1).format(PickerValueFormatter),
+                                    )
+                                    pickingEnd = false
+                                } else {
+                                    // First tap (or tapping before the start): begin a new 1-hour booking.
+                                    onChange(
+                                        slotStart.format(PickerValueFormatter),
+                                        slotStart.plusHours(1).format(PickerValueFormatter),
+                                    )
+                                    pickingEnd = true
+                                }
                             },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -1382,6 +1409,25 @@ private fun VisitSchedulePicker(
             Spacer(modifier = Modifier.height(8.dp))
         }
     }
+    if (selectedStart != null && selectedEnd != null && selectedEnd.isAfter(selectedStart)) {
+        val hoursBooked = java.time.Duration.between(selectedStart, selectedEnd).toMinutes() / 60.0
+        val durationLabel = if (hoursBooked % 1.0 == 0.0) "${hoursBooked.toInt()} h" else "%.1f h".format(hoursBooked)
+        Text(
+            text = "${selectedStart.format(SlotLabelFormatter)} – ${selectedEnd.format(SlotLabelFormatter)} · $durationLabel",
+            color = Grid800,
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+    Text(
+        text = if (pickingEnd) {
+            "Now tap an end time, or tap the same slot to keep 1 hour."
+        } else {
+            "Tap a start time, then an end time to book longer."
+        },
+        color = Slate600,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(top = 2.dp),
+    )
 }
 
 @Composable

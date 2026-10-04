@@ -69,6 +69,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.location.LatLngPoint
 import com.gridsync.mobile.data.location.UserLocationProvider
 import com.gridsync.mobile.data.remote.dto.NearbyStationResponseDto
@@ -213,6 +214,7 @@ fun ProsumerDashboardScreen(
                 }
             } catch (e: Exception) {
                 nearbyError = e.message ?: "Could not load nearby stations."
+                app.toast(nearbyError.orEmpty(), long = true)
                 nearbyStations = emptyList()
             } finally {
                 isLoadingNearby = false
@@ -226,6 +228,9 @@ fun ProsumerDashboardScreen(
         locationPermissionGranted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         locationServicesEnabled = app.userLocationProvider.isLocationEnabled()
+        if (!locationPermissionGranted) {
+            app.toast("Location permission denied. Showing stations near Colombo.", long = true)
+        }
         reloadToken += 1
     }
 
@@ -257,6 +262,9 @@ fun ProsumerDashboardScreen(
                 usingFallbackLocation = resolved.isFallback
                 selectedStationId = null
                 cameraFocus = MapCameraFocus.User
+                if (resolved.isFallback) {
+                    app.toast("Couldn't get your GPS location. Showing the Colombo area.", long = true)
+                }
 
                 if (!resolved.isFallback) {
                     // Refresh nearby around the real GPS point.

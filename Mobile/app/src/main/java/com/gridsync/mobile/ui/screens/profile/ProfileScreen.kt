@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.remote.dto.UserResponseDto
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
 import com.gridsync.mobile.ui.theme.ErrorRed200
@@ -214,8 +215,10 @@ fun ProfileScreen(
                         ).toProfileUi()
                         applyProfile(updated)
                         contactSuccess = "Profile saved. Your contact details are up to date."
+                        app.toast("Profile saved.")
                     } catch (e: Exception) {
                         contactError = e.message ?: "Update failed"
+                        app.toast(contactError.orEmpty(), long = true)
                     } finally {
                         contactLoading = false
                     }
@@ -243,8 +246,10 @@ fun ProfileScreen(
                         newPassword = ""
                         confirmPassword = ""
                         pwSuccess = "Password updated. Use the new password next time you sign in."
+                        app.toast("Password updated.")
                     } catch (e: Exception) {
                         pwError = e.message ?: "Change failed"
+                        app.toast(pwError.orEmpty(), long = true)
                     } finally {
                         pwLoading = false
                     }
@@ -268,8 +273,10 @@ fun ProfileScreen(
                 applyProfile(updated)
                 confirmDeact = false
                 deactSuccess = "Deactivation requested. A Backoffice officer will complete the process."
+                app.toast("Deactivation requested.")
             } catch (e: Exception) {
                 deactError = e.message ?: "Request failed"
+                app.toast(deactError.orEmpty(), long = true)
             } finally {
                 deactLoading = false
             }
@@ -282,6 +289,7 @@ fun ProfileScreen(
         scope.launch {
             try {
                 app.authRepository.logout()
+                app.toast("Signed out.")
             } finally {
                 signingOut = false
                 onSignOut()

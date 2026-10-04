@@ -50,6 +50,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.ui.util.toast
 import com.gridsync.mobile.data.remote.dto.ReservationDto
 import com.gridsync.mobile.ui.components.MockQrCode
 import com.gridsync.mobile.ui.theme.ErrorRed200
@@ -227,9 +228,11 @@ private fun BookingDetailContent(
                             slotEndIso = endIso,
                         )
                         message = "Booking updated."
+                        app.toast("Booking updated.")
                         onUpdated(updated)
                     } catch (e: Exception) {
                         error = e.message ?: "Could not update this booking"
+                        app.toast(error.orEmpty(), long = true)
                     } finally {
                         saving = false
                     }
@@ -246,10 +249,12 @@ private fun BookingDetailContent(
             try {
                 val updated = app.reservationRepository.cancel(reservation.id)
                 message = "Booking cancelled."
+                app.toast("Booking cancelled.")
                 showQr = false
                 onUpdated(updated)
             } catch (e: Exception) {
                 error = e.message ?: "Could not cancel this booking"
+                app.toast(error.orEmpty(), long = true)
             } finally {
                 cancelling = false
             }
