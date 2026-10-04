@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gridsync.mobile.GridSyncApp
 import com.gridsync.mobile.data.remote.dto.AvailableBookingSlotDto
+import com.gridsync.mobile.data.remote.dto.StationScheduleDto
 import com.gridsync.mobile.ui.theme.ErrorRed200
 import com.gridsync.mobile.ui.theme.ErrorRed50
 import com.gridsync.mobile.ui.theme.ErrorRed800
@@ -75,6 +78,12 @@ import com.gridsync.mobile.ui.util.defaultVisitStartLocal
 import com.gridsync.mobile.ui.util.validateVisitWithinStationHours
 import com.gridsync.mobile.ui.util.localDateTimeToIsoUtc
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.format.TextStyle
+import java.util.Locale
+import java.time.format.DateTimeFormatter
 
 private enum class ReservationTypeUi(val apiValue: String, val label: String, val hint: String) {
     Charging("Charging", "Charging", "Deposit energy into a battery"),
@@ -121,6 +130,7 @@ fun CreateReservationScreen(
     var success by remember { mutableStateOf(false) }
     var createdCode by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var schedule by remember { mutableStateOf<StationScheduleDto?>(null) }
 
     fun applyInitialStation(options: List<StationOption>) {
         val match = initialStationId?.takeIf { id -> options.any { it.id == id } }
@@ -155,6 +165,17 @@ fun CreateReservationScreen(
 
     LaunchedEffect(Unit) {
         reloadSlots()
+    }
+
+    LaunchedEffect(stationId) {
+        schedule = null
+        if (stationId.isNotBlank()) {
+            schedule = try {
+                app.stationRepository.getById(stationId).schedule
+            } catch (_: Exception) {
+                null // fall back to unrestricted hours if the schedule can't be loaded
+            }
+        }
     }
 
     val stations = remember(slots) { groupStations(slots) }
@@ -206,7 +227,7 @@ fun CreateReservationScreen(
                         false
                     }
                     visitStart.isBlank() || visitEnd.isBlank() -> {
-                        error = "Visit start and end are required"
+                        error = "Pick a date and a time slot"
                         false
                     }
                     else -> {
@@ -410,11 +431,11 @@ fun CreateReservationScreen(
                         availableForType = availableForType,
                         batterySelected = batteryId.isNotBlank(),
                         visitStart = visitStart,
+                        schedule = schedule,
                         onVisitStartChange = {
                             visitStart = it
                             error = null
                         },
-                        visitEnd = visitEnd,
                         onVisitEndChange = {
                             visitEnd = it
                             error = null
@@ -695,8 +716,8 @@ private fun StepDetailsContent(
     availableForType: Double,
     batterySelected: Boolean,
     visitStart: String,
+    schedule: StationScheduleDto?,
     onVisitStartChange: (String) -> Unit,
-    visitEnd: String,
     onVisitEndChange: (String) -> Unit,
     openTime: String = "08:00",
     closeTime: String = "18:00",
@@ -763,27 +784,13 @@ private fun StepDetailsContent(
     )
 
     Spacer(modifier = Modifier.height(8.dp))
-    FieldLabel("Visit start")
-    OutlinedTextField(
-        value = visitStart,
-        onValueChange = onVisitStartChange,
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        placeholder = { Text("YYYY-MM-DD HH:mm", color = Slate600.copy(alpha = 0.7f)) },
-        shape = RoundedCornerShape(8.dp),
-        colors = fieldColors,
-    )
-
-    Spacer(modifier = Modifier.height(8.dp))
-    FieldLabel("Visit end")
-    OutlinedTextField(
-        value = visitEnd,
-        onValueChange = onVisitEndChange,
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-        placeholder = { Text("YYYY-MM-DD HH:mm", color = Slate600.copy(alpha = 0.7f)) },
-        shape = RoundedCornerShape(8.dp),
-        colors = fieldColors,
+    VisitSchedulePicker(
+        visitStart = visitStart,
+        schedule = schedule,
+        onChange = { start, end ->
+            onVisitStartChange(start)
+            onVisitEndChange(end)
+        },
     )
 
     Text(
@@ -1154,6 +1161,226 @@ private fun TypeChip(
             color = Slate600,
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+private val PickerValueFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+private val SlotLabelFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("h:mm a")
+private val DayNameFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE")
+private val MonthFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM")
+
+/** True when a 1-hour slot starting at [slotStart] sits inside the station's working days and hours. */
+private fun withinOperatingHours(slotStart: LocalDateTime, schedule: StationScheduleDto?): Boolean {
+    if (schedule == null) return true
+    if (schedule.workingDays.isNotEmpty()) {
+        val day = slotStart.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+        if (schedule.workingDays.none { it.trim().take(3).equals(day, ignoreCase = true) }) return false
+    }
+    val open = runCatching { LocalTime.parse(schedule.openTime) }.getOrNull() ?: return true
+    val close = runCatching { LocalTime.parse(schedule.closeTime) }.getOrNull() ?: return true
+    val startMin = slotStart.hour * 60 + slotStart.minute
+    return startMin >= open.hour * 60 + open.minute && startMin + 60 <= close.hour * 60 + close.minute
+}
+
+private fun isBookableSlot(
+    slotStart: LocalDateTime,
+    now: LocalDateTime,
+    schedule: StationScheduleDto?,
+): Boolean =
+    slotStart.isAfter(now) && !slotStart.isAfter(now.plusDays(7)) &&
+        withinOperatingHours(slotStart, schedule)
+
+/** First bookable hour on [date] within operating hours. */
+private fun firstFreeSlot(date: LocalDate, now: LocalDateTime, schedule: StationScheduleDto?): LocalDateTime? =
+    (0..23).map { date.atTime(it, 0) }.firstOrNull { isBookableSlot(it, now, schedule) }
+
+private fun formatOperatingHours(schedule: StationScheduleDto): String? {
+    val fmt = DateTimeFormatter.ofPattern("h:mm a")
+    val open = runCatching { LocalTime.parse(schedule.openTime).format(fmt) }.getOrNull() ?: return null
+    val close = runCatching { LocalTime.parse(schedule.closeTime).format(fmt) }.getOrNull() ?: return null
+    val days = schedule.workingDays.joinToString(", ").ifBlank { "Every day" }
+    return "Open $open – $close · $days"
+}
+
+/** Date strip (today + 6 days) and hourly time-slot grid. Emits `yyyy-MM-dd HH:mm` start/end. */
+@Composable
+private fun VisitSchedulePicker(
+    visitStart: String,
+    schedule: StationScheduleDto?,
+    onChange: (start: String, end: String) -> Unit,
+) {
+    val now = LocalDateTime.now()
+    val today = now.toLocalDate()
+    val dates = remember(today) { (0..6).map { today.plusDays(it.toLong()) } }
+    val selectedStart = remember(visitStart) {
+        runCatching { LocalDateTime.parse(visitStart.trim().replace(' ', 'T')) }.getOrNull()
+    }
+    var selectedDate by remember { mutableStateOf(selectedStart?.toLocalDate() ?: today) }
+
+    val dateStripScroll = rememberScrollState()
+    val density = LocalDensity.current
+    LaunchedEffect(selectedDate) {
+        val index = dates.indexOf(selectedDate).coerceAtLeast(0)
+        // Chip width (62dp) + spacing (8dp), minus a little so the previous chip peeks in.
+        val target = with(density) { (index * 70).dp.roundToPx() }
+        dateStripScroll.animateScrollTo(target)
+    }
+
+    FieldLabel("Date")
+    Row(
+        modifier = Modifier.horizontalScroll(dateStripScroll),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        dates.forEach { date ->
+            val selected = date == selectedDate
+            val dayOpen = firstFreeSlot(date, now, schedule) != null
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(62.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (selected) Grid700 else if (dayOpen) Color.White else Color(0xFFF1F5F9))
+                    .border(
+                        1.dp,
+                        if (selected) Grid700 else if (dayOpen) Grid100 else Color.Transparent,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable(enabled = dayOpen) {
+                        selectedDate = date
+                        val current = LocalDateTime.now()
+                        val kept = selectedStart?.hour?.let { date.atTime(it, 0) }
+                        val pick = if (kept != null && isBookableSlot(kept, current, schedule)) {
+                            kept
+                        } else {
+                            firstFreeSlot(date, current, schedule)
+                        }
+                        if (pick != null) {
+                            onChange(
+                                pick.format(PickerValueFormatter),
+                                pick.plusHours(1).format(PickerValueFormatter),
+                            )
+                        } else {
+                            onChange("", "")
+                        }
+                    }
+                    .padding(vertical = 10.dp),
+            ) {
+                Text(
+                    text = if (date == today) "Today" else date.format(DayNameFormatter),
+                    color = if (selected) Color.White.copy(alpha = 0.85f) else Slate600,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = date.dayOfMonth.toString(),
+                    color = if (selected) Color.White else Grid900,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+                Text(
+                    text = date.format(MonthFormatter),
+                    color = if (selected) Color.White.copy(alpha = 0.85f) else Slate600,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+    FieldLabel("Time slot (1 hour)")
+    schedule?.let { formatOperatingHours(it) }?.let {
+        Text(
+            text = it,
+            color = Slate600,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+    }
+    // Auto-select the first free slot if nothing valid is selected yet (re-runs once the
+    // station's operating hours load).
+    LaunchedEffect(schedule) {
+        val current = LocalDateTime.now()
+        val valid = selectedStart != null && isBookableSlot(selectedStart, current, schedule)
+        if (!valid) {
+            val date = if (firstFreeSlot(selectedDate, current, schedule) != null) {
+                selectedDate
+            } else {
+                dates.firstOrNull { firstFreeSlot(it, current, schedule) != null }
+            }
+            val pick = date?.let { firstFreeSlot(it, current, schedule) }
+            if (date != null) selectedDate = date
+            if (pick != null) {
+                onChange(
+                    pick.format(PickerValueFormatter),
+                    pick.plusHours(1).format(PickerValueFormatter),
+                )
+            } else {
+                onChange("", "")
+            }
+        }
+    }
+    // Only hours inside the station's operating window are shown; past ones are greyed out.
+    val slotHours = (0..23).filter { withinOperatingHours(selectedDate.atTime(it, 0), schedule) }
+    if (slotHours.none { isBookableSlot(selectedDate.atTime(it, 0), now, schedule) }) {
+        Text(
+            text = "No free slots on this day. Pick another date.",
+            color = Slate600,
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    run {
+        slotHours.chunked(4).forEach { hours ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                hours.forEach { hour ->
+                    val slotStart = selectedDate.atTime(hour, 0)
+                    val enabled = isBookableSlot(slotStart, now, schedule)
+                    val selected = selectedStart == slotStart
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                when {
+                                    selected -> Grid700
+                                    enabled -> Color.White
+                                    else -> Color(0xFFF1F5F9)
+                                }
+                            )
+                            .border(
+                                1.dp,
+                                if (selected) Grid700 else if (enabled) Grid100 else Color.Transparent,
+                                RoundedCornerShape(10.dp),
+                            )
+                            .clickable(enabled = enabled) {
+                                onChange(
+                                    slotStart.format(PickerValueFormatter),
+                                    slotStart.plusHours(1).format(PickerValueFormatter),
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = slotStart.format(SlotLabelFormatter),
+                            color = when {
+                                selected -> Color.White
+                                enabled -> Slate900
+                                else -> Slate300
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            ),
+                        )
+                    }
+                }
+                repeat(4 - hours.size) { Spacer(modifier = Modifier.weight(1f)) }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
     }
 }
 
