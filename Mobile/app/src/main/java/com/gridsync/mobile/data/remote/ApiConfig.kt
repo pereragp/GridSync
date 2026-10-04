@@ -1,14 +1,17 @@
 package com.gridsync.mobile.data.remote
 
+import com.gridsync.mobile.BuildConfig
+
 /**
- * Emulator → host machine (special Android alias for your Mac's localhost).
+ * Backend base URL from `Mobile/local.properties` → `API_BASE_URL`.
  *
- * Requires the API to listen on all interfaces, e.g. http://0.0.0.0:5269
- * (see GridSync.Api launchSettings "http" profile).
+ * - Emulator: `http://10.0.2.2:5269/` (special alias for the host machine)
+ * - Physical phone on same Wi‑Fi: `http://<your-mac-lan-ip>:5269/`
  *
- * Physical device on the same Wi‑Fi: use your Mac LAN IP instead, e.g.
- * http://192.168.1.4:5269/ — and allow GridSync.Api through macOS Firewall.
+ * API must listen on all interfaces (`http://0.0.0.0:5269`).
  */
 object ApiConfig {
-    const val BASE_URL = "http://10.0.2.2:5269/"
+    val BASE_URL: String = BuildConfig.API_BASE_URL.let { url ->
+        if (url.endsWith("/")) url else "$url/"
+    }
 }

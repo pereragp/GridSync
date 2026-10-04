@@ -25,10 +25,11 @@ fun Throwable.toUserMessage(): String {
         }
         is IOException -> {
             val detail = message?.takeIf { it.isNotBlank() }
+            val base = ApiConfig.BASE_URL.trimEnd('/')
             if (detail != null) {
-                "Cannot reach the server ($detail). Is the API running on port 5269?"
+                "Cannot reach the server at $base ($detail). On a physical phone use your Mac LAN IP in local.properties (API_BASE_URL), not 10.0.2.2."
             } else {
-                "Cannot reach the server. Check that the API is running on port 5269."
+                "Cannot reach the server at $base. Is the API running, and is API_BASE_URL correct for emulator vs phone?"
             }
         }
         else -> message ?: "Something went wrong"

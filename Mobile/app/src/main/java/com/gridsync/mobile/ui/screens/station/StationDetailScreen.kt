@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -20,26 +21,36 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.gridsync.mobile.GridSyncApp
+import com.gridsync.mobile.data.remote.dto.StationResponseDto
 import com.gridsync.mobile.ui.components.AUTH_HERO_IMAGE_URL
-import com.gridsync.mobile.ui.data.MockBattery
-import com.gridsync.mobile.ui.data.MockStationDetail
 import com.gridsync.mobile.ui.data.MockStationRepository
+import com.gridsync.mobile.ui.theme.ErrorRed200
+import com.gridsync.mobile.ui.theme.ErrorRed50
+import com.gridsync.mobile.ui.theme.ErrorRed800
 import com.gridsync.mobile.ui.theme.Grid100
 import com.gridsync.mobile.ui.theme.Grid50
 import com.gridsync.mobile.ui.theme.Grid600
@@ -54,43 +65,133 @@ import com.gridsync.mobile.ui.theme.Slate700
 import com.gridsync.mobile.ui.theme.Slate900
 import com.gridsync.mobile.ui.theme.SourceSerifFontFamily
 
+data class StationDetailUi(
+    val id: String,
+    val name: String,
+    val code: String,
+    val description: String,
+    val distanceKm: Double? = null,
+    val status: String,
+    val openTime: String,
+    val closeTime: String,
+    val workingDays: List<String>,
+    val availableBatterySlots: Int,
+    val batteryCapacityKwh: Double,
+    val totalCapacityKwh: Double,
+    val latitude: Double,
+    val longitude: Double,
+)
+
+private fun StationResponseDto.toUi(distanceKm: Double? = null) = StationDetailUi(
+    id = id,
+    name = name,
+    code = stationCode,
+    description = description?.takeIf { it.isNotBlank() } ?: "Solar grid hub ready for Charging and Drop-off reservations.",
+    distanceKm = distanceKm,
+    status = status,
+    openTime = schedule.openTime,
+    closeTime = schedule.closeTime,
+    workingDays = schedule.workingDays,
+    availableBatterySlots = availableBatterySlots,
+    batteryCapacityKwh = batteryCapacityKwh,
+    totalCapacityKwh = totalCapacityKwh,
+    latitude = latitude,
+    longitude = longitude,
+)
+
 @Composable
 fun StationDetailScreen(
     stationId: String,
+    distanceKm: Double? = null,
     onBack: () -> Unit = {},
     onReserve: (stationId: String) -> Unit = {},
 ) {
-    val station = MockStationRepository.findById(stationId)
+    val app = LocalContext.current.applicationContext as GridSyncApp
+    var station by remember { mutableStateOf<StationDetailUi?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
 
-    if (station == null) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Grid50)
-                .statusBarsPadding()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("Station not found", color = Slate900, style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(onClick = onBack) {
-                Text("Go back")
+    LaunchedEffect(stationId) {
+        isLoading = true
+        error = null
+        try {
+            station = app.stationRepository.getById(stationId).toUi(distanceKm)
+        } catch (e: Exception) {
+            // Keep mock fallback for local UI demos with ids "1".."4".
+            val mock = MockStationRepository.findById(stationId)
+            if (mock != null) {
+                station = StationDetailUi(
+                    id = mock.id,
+                    name = mock.name,
+                    code = mock.code,
+                    description = mock.description,
+                    distanceKm = mock.distanceKm,
+                    status = mock.status,
+                    openTime = mock.openTime,
+                    closeTime = mock.closeTime,
+                    workingDays = mock.workingDays,
+                    availableBatterySlots = mock.availableBatterySlots,
+                    batteryCapacityKwh = mock.batteryCapacityKwh,
+                    totalCapacityKwh = mock.totalCapacityKwh,
+                    latitude = mock.latitude,
+                    longitude = mock.longitude,
+                )
+            } else {
+                error = e.message ?: "Station not found"
+                station = null
             }
+        } finally {
+            isLoading = false
         }
-        return
     }
 
-    StationDetailContent(
-        station = station,
-        onBack = onBack,
-        onReserve = { onReserve(station.id) },
-    )
+    when {
+        isLoading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Grid50),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = Grid700, modifier = Modifier.size(32.dp))
+            }
+        }
+
+        station == null -> {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Grid50)
+                    .statusBarsPadding()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = error ?: "Station not found",
+                    color = Slate900,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(onClick = onBack) {
+                    Text("Go back")
+                }
+            }
+        }
+
+        else -> {
+            StationDetailContent(
+                station = station!!,
+                onBack = onBack,
+                onReserve = { onReserve(station!!.id) },
+            )
+        }
+    }
 }
 
 @Composable
 private fun StationDetailContent(
-    station: MockStationDetail,
+    station: StationDetailUi,
     onBack: () -> Unit,
     onReserve: () -> Unit,
 ) {
@@ -145,18 +246,19 @@ private fun StationDetailContent(
                     InfoRow("Location", String.format("%.4f, %.4f", station.latitude, station.longitude))
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
-                SectionTitle("Batteries on site")
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${station.batteries.size} units with live Charging / Drop-off availability.",
-                    color = Slate600,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                station.batteries.forEach { battery ->
-                    BatteryCard(batteryIndex = battery.batteryIndex, battery = battery)
-                    Spacer(modifier = Modifier.height(10.dp))
+                if (errorBannerNeeded(station.status)) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "This hub is inactive and cannot accept new reservations.",
+                        color = ErrorRed800,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ErrorRed50)
+                            .border(1.dp, ErrorRed200, RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -184,7 +286,7 @@ private fun StationDetailContent(
             }
             Button(
                 onClick = onReserve,
-                enabled = station.status == "Active",
+                enabled = station.status.equals("Active", ignoreCase = true),
                 modifier = Modifier
                     .weight(1.4f)
                     .height(46.dp),
@@ -201,9 +303,12 @@ private fun StationDetailContent(
     }
 }
 
+private fun errorBannerNeeded(status: String): Boolean =
+    !status.equals("Active", ignoreCase = true)
+
 @Composable
 private fun StationHero(
-    station: MockStationDetail,
+    station: StationDetailUi,
     onBack: () -> Unit,
 ) {
     Box(
@@ -249,12 +354,14 @@ private fun StationHero(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusPill(station.status)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = String.format("%.1f km away", station.distanceKm),
-                        color = Grid100.copy(alpha = 0.9f),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                    station.distanceKm?.let { km ->
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = String.format("%.1f km away", km),
+                            color = Grid100.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -361,89 +468,30 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-@Composable
-private fun BatteryCard(
-    batteryIndex: Int,
-    battery: MockBattery,
-) {
-    val fillPct = if (battery.capacityKwh > 0) {
-        ((battery.actualEnergyKwh / battery.capacityKwh) * 100).toInt().coerceIn(0, 100)
-    } else {
-        0
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White)
-            .border(1.dp, Grid100, RoundedCornerShape(14.dp))
-            .padding(14.dp)
-    ) {
-        Text(
-            text = "Battery #$batteryIndex",
-            color = Grid900,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Stored", color = Slate600, style = MaterialTheme.typography.bodySmall)
-            Text(
-                text = "${battery.actualEnergyKwh} / ${battery.capacityKwh} kWh",
-                color = Slate700,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color(0xFFE2E8F0))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fillPct / 100f)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(Grid600)
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiniStat("Charge avail", "${battery.availableChargingKwh} kWh", Modifier.weight(1f))
-            MiniStat("Drop-off avail", "${battery.availableDropOffKwh} kWh", Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun MiniStat(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Grid50)
-            .border(1.dp, Grid100, RoundedCornerShape(10.dp))
-            .padding(10.dp)
-    ) {
-        Text(text = label, color = Slate600, style = MaterialTheme.typography.bodySmall)
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            color = Grid800,
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun StationDetailPreview() {
+    val mock = MockStationRepository.stations.first()
     GridSyncMobileTheme {
-        StationDetailScreen(stationId = "1")
+        StationDetailContent(
+            station = StationDetailUi(
+                id = mock.id,
+                name = mock.name,
+                code = mock.code,
+                description = mock.description,
+                distanceKm = mock.distanceKm,
+                status = mock.status,
+                openTime = mock.openTime,
+                closeTime = mock.closeTime,
+                workingDays = mock.workingDays,
+                availableBatterySlots = mock.availableBatterySlots,
+                batteryCapacityKwh = mock.batteryCapacityKwh,
+                totalCapacityKwh = mock.totalCapacityKwh,
+                latitude = mock.latitude,
+                longitude = mock.longitude,
+            ),
+            onBack = {},
+            onReserve = {},
+        )
     }
 }
