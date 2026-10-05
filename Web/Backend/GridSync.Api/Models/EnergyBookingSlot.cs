@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: EnergyBookingSlot.cs
+// Project: GridSync.Api
+// Description: Mongo model for one physical battery at a solar station.
+// -------------------------------------------------------------
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 

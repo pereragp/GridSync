@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: AvailableBookingSlotResponse.cs
+// Project: GridSync.Api
+// Description: DTO for batteries available to book (Charging/DropOff).
+// -------------------------------------------------------------
+
 namespace GridSync.Api.Models.Dtos;
 
 /// <summary>Battery shown to prosumers for Charging / DropOff booking.</summary>

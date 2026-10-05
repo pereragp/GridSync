@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: ReservationService.cs
+// Project: GridSync.Api
+// Description: Business logic for energy reservations (FAT service).
+// -------------------------------------------------------------
+
 using System.Security.Cryptography;
 using GridSync.Api.Data;
 using GridSync.Api.Models;
@@ -11,13 +17,17 @@ public class ReservationService
 {
     private readonly MongoDbContext _db;
 
+    /// <summary>Inject MongoDB context.</summary>
     public ReservationService(MongoDbContext db)
     {
+        // Wire MongoDB context for reservation data.
         _db = db;
     }
 
+    /// <summary>Load one reservation; prosumers only see their own.</summary>
     public async Task<EnergyReservation> GetByIdAsync(string userId, string reservationId, bool staffAccess)
     {
+        // Load reservation and enforce prosumer ownership unless staff.
         var reservation = await FindRequiredAsync(reservationId);
 
         if (!staffAccess && reservation.ProsumerId != userId)
@@ -26,8 +36,10 @@ public class ReservationService
         return reservation;
     }
 
+    /// <summary>Past reservations for a prosumer (optionally by status).</summary>
     public async Task<List<EnergyReservation>> GetHistoryAsync(string prosumerId, string? status)
     {
+        // Past slots for this prosumer, optionally filtered by status.
         await ExpirePastReservationsAsync();
 
         var filter = Builders<EnergyReservation>.Filter.Eq(r => r.ProsumerId, prosumerId);
@@ -41,8 +53,10 @@ public class ReservationService
             .ToListAsync();
     }
 
+    /// <summary>Upcoming reservations for a prosumer.</summary>
     public async Task<List<EnergyReservation>> GetUpcomingAsync(string prosumerId, string? status)
     {
+        // Future slots for this prosumer, optionally filtered by status.
         await ExpirePastReservationsAsync();
 
         var filter = Builders<EnergyReservation>.Filter.Eq(r => r.ProsumerId, prosumerId) &
@@ -57,8 +71,10 @@ public class ReservationService
             .ToListAsync();
     }
 
+    /// <summary>All reservations for grid-operator manage view.</summary>
     public async Task<List<EnergyReservation>> GetForStaffAsync(string? status)
     {
+        // All reservations for operators, optionally filtered by status.
         await ExpirePastReservationsAsync();
 
         var filter = Builders<EnergyReservation>.Filter.Empty;
@@ -74,6 +90,7 @@ public class ReservationService
     /// <summary>Lists open batteries on active stations with Charging/DropOff availability.</summary>
     public async Task<List<AvailableBookingSlotResponse>> GetAvailableSlotsAsync()
     {
+        // List bookable batteries on active stations with availability figures.
         var slots = await _db.EnergyBookingSlots
             .Find(slot => slot.Status == SlotStatus.Available)
             .SortBy(slot => slot.StationId)
@@ -115,12 +132,14 @@ public class ReservationService
             .ToList();
     }
 
+    /// <summary>Approve or reject a pending reservation.</summary>
     public async Task<EnergyReservation> ReviewAsync(
         string staffId,
         string reservationId,
         bool approve,
         ReviewReservationRequest request)
     {
+        // Approve (QR) or reject a pending reservation.
         var reservation = await FindRequiredAsync(reservationId);
 
         if (reservation.Status != ReservationStatus.Pending)
@@ -157,8 +176,10 @@ public class ReservationService
         return reservation;
     }
 
+    /// <summary>Validate a reservation QR payload for transfer.</summary>
     public async Task<ReservationQrVerificationResponse> VerifyQrAsync(string qrPayload)
     {
+        // Look up an approved reservation by its QR payload.
         if (string.IsNullOrWhiteSpace(qrPayload))
             throw new InvalidOperationException("QR payload is required.");
 
@@ -187,8 +208,10 @@ public class ReservationService
         };
     }
 
+    /// <summary>Complete an approved reservation and update battery stock.</summary>
     public async Task<ReservationCompletionResponse> CompleteAsync(string operatorId, string reservationId)
     {
+        // Mark approved reservation completed and apply battery inventory.
         var reservation = await FindRequiredAsync(reservationId);
         if (reservation.Status != ReservationStatus.Approved)
             throw new InvalidOperationException(
@@ -222,8 +245,10 @@ public class ReservationService
         };
     }
 
+    /// <summary>Operator dashboard reservation counts.</summary>
     public async Task<ReservationDashboardStatsResponse> GetDashboardStatsAsync()
     {
+        // Aggregate reservation counts for operator dashboard.
         await ExpirePastReservationsAsync();
         var now = DateTime.UtcNow;
         var reservations = _db.EnergyReservations;
@@ -245,8 +270,10 @@ public class ReservationService
         };
     }
 
+    /// <summary>Prosumer pending and active counts.</summary>
     public async Task<ProsumerDashboardStatsResponse> GetProsumerDashboardStatsAsync(string prosumerId)
     {
+        // Pending and active counts for one prosumer.
         await ExpirePastReservationsAsync();
         var now = DateTime.UtcNow;
         var reservations = _db.EnergyReservations;
@@ -262,6 +289,7 @@ public class ReservationService
         };
     }
 
+    /// <summary>Search reservations by status, station, date, or text.</summary>
     public async Task<List<EnergyReservation>> SearchAsync(
         string userId,
         bool staffAccess,
@@ -271,6 +299,7 @@ public class ReservationService
         DateTime? to,
         string? q)
     {
+        // Search reservations by status, station, date, or text.
         await ExpirePastReservationsAsync();
 
         var filter = staffAccess
@@ -317,11 +346,13 @@ public class ReservationService
             .ToListAsync();
     }
 
+    /// <summary>Prosumer updates a pending reservation (≥12h before start).</summary>
     public async Task<EnergyReservation> UpdateAsync(
         string prosumerId,
         string reservationId,
         UpdateReservationRequest request)
     {
+        // Prosumer updates a pending reservation (≥12h before start).
         var reservation = await FindOwnedAsync(prosumerId, reservationId);
 
         if (reservation.Status != ReservationStatus.Pending)
@@ -367,11 +398,13 @@ public class ReservationService
         return reservation;
     }
 
+    /// <summary>Prosumer cancels a reservation (≥12h before start).</summary>
     public async Task<EnergyReservation> CancelAsync(
         string prosumerId,
         string reservationId,
         CancelReservationRequest request)
     {
+        // Prosumer cancels a reservation (≥12h before start).
         var reservation = await FindOwnedAsync(prosumerId, reservationId);
 
         if (reservation.Status is ReservationStatus.Cancelled or ReservationStatus.Completed
@@ -403,8 +436,10 @@ public class ReservationService
         return reservation;
     }
 
+    /// <summary>Create a pending Charging or DropOff reservation.</summary>
     public async Task<EnergyReservation> CreateAsync(string prosumerId, CreateReservationRequest request)
     {
+        // Create a pending Charging or DropOff reservation.
         if (!ObjectId.TryParse(prosumerId, out _))
             throw new InvalidOperationException("The authenticated user id is invalid.");
 
@@ -493,6 +528,7 @@ public class ReservationService
     /// <summary>Atomically reserves kWh on a battery for Charging or DropOff.</summary>
     private async Task ReserveEnergyAsync(string slotId, string reservationType, double energyKwh)
     {
+        // Atomically soft-lock kWh on a battery.
         FilterDefinition<EnergyBookingSlot> filter;
         UpdateDefinition<EnergyBookingSlot> update;
 
@@ -538,6 +574,7 @@ public class ReservationService
     /// <summary>Releases reserved kWh without changing ActualEnergyKwh.</summary>
     private async Task ReleaseReservedEnergyAsync(EnergyReservation reservation)
     {
+        // Release soft-locked kWh without changing actual energy.
         if (reservation.EnergyKwh <= 0)
             return;
 
@@ -565,6 +602,7 @@ public class ReservationService
     /// </summary>
     private async Task ApplyCompletionInventoryAsync(EnergyReservation reservation)
     {
+        // Apply Charging deposit or DropOff withdrawal on complete.
         FilterDefinition<EnergyBookingSlot> filter;
         UpdateDefinition<EnergyBookingSlot> update;
 
@@ -609,8 +647,10 @@ public class ReservationService
         }
     }
 
+    /// <summary>Mark past Pending/Approved reservations as Expired.</summary>
     private async Task ExpirePastReservationsAsync()
     {
+        // Mark past Pending/Approved reservations as Expired.
         var now = DateTime.UtcNow;
         var expired = await _db.EnergyReservations
             .Find(r => r.SlotEnd <= now &&
@@ -631,8 +671,10 @@ public class ReservationService
         }
     }
 
+    /// <summary>Load reservation by id or throw.</summary>
     private async Task<EnergyReservation> FindRequiredAsync(string reservationId)
     {
+        // Load reservation by id or throw.
         if (!ObjectId.TryParse(reservationId, out _))
             throw new InvalidOperationException("Reservation id must be a valid id.");
 
@@ -640,8 +682,10 @@ public class ReservationService
             ?? throw new KeyNotFoundException("Reservation not found.");
     }
 
+    /// <summary>Load reservation owned by prosumer or throw.</summary>
     private async Task<EnergyReservation> FindOwnedAsync(string prosumerId, string reservationId)
     {
+        // Load reservation owned by prosumer or throw.
         if (!ObjectId.TryParse(reservationId, out _))
             throw new InvalidOperationException("Reservation id must be a valid id.");
 
@@ -651,8 +695,10 @@ public class ReservationService
             ?? throw new KeyNotFoundException("Reservation not found.");
     }
 
+    /// <summary>Ensure type is Charging/DropOff and energy > 0.</summary>
     private static void ValidateEnergyAndType(string reservationType, double energyKwh)
     {
+        // Ensure type is Charging/DropOff and energy > 0.
         if (reservationType is not (ReservationTypes.Charging or ReservationTypes.DropOff))
             throw new InvalidOperationException("ReservationType must be Charging or DropOff.");
 
@@ -660,8 +706,10 @@ public class ReservationService
             throw new InvalidOperationException("EnergyKwh must be greater than zero.");
     }
 
+    /// <summary>Ensure visit end is after start.</summary>
     private static void ValidateVisitWindow(DateTime start, DateTime end)
     {
+        // Ensure visit end is after start.
         start = EnsureUtc(start);
         end = EnsureUtc(end);
         if (end <= start)
@@ -677,6 +725,7 @@ public class ReservationService
         DateTime slotStartUtc,
         DateTime slotEndUtc)
     {
+        // Ensure visit fits station working hours.
         var schedule = station.Schedule ?? new StationSchedule();
         if (!TimeOnly.TryParse(schedule.OpenTime, out var open))
             throw new InvalidOperationException("Station open time is invalid.");
@@ -723,8 +772,10 @@ public class ReservationService
         }
     }
 
+    /// <summary>Resolve Asia/Colombo (or Sri Lanka) time zone.</summary>
     private static TimeZoneInfo ResolveStationTimeZone()
     {
+        // Resolve Asia/Colombo (or Sri Lanka) time zone.
         foreach (var id in new[] { "Asia/Colombo", "Sri Lanka Standard Time" })
         {
             try
@@ -747,6 +798,7 @@ public class ReservationService
             "Sri Lanka");
     }
 
+    /// <summary>Map DayOfWeek to Mon..Sun abbreviation.</summary>
     private static string ToDayAbbreviation(DayOfWeek day) => day switch
     {
         DayOfWeek.Monday => "Mon",
@@ -759,6 +811,7 @@ public class ReservationService
         _ => day.ToString()[..3],
     };
 
+    /// <summary>Sort key for working-day abbreviations.</summary>
     private static int DaySortKey(string day) => day.ToLowerInvariant() switch
     {
         "mon" => 1,
@@ -779,14 +832,18 @@ public class ReservationService
     private static double AvailableDropOff(EnergyBookingSlot s) =>
         Math.Max(s.ActualEnergyKwh - s.ReservedDropOffKwh, 0);
 
+    /// <summary>Treat DateTime as UTC.</summary>
     private static DateTime EnsureUtc(DateTime value) =>
         value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
 
+    /// <summary>Generate a unique RSV-yyyyMMdd-###### code.</summary>
     private static string GenerateReservationCode() =>
         $"RSV-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(100000, 1000000)}";
 
+    /// <summary>Build a one-time QR payload for an approved reservation.</summary>
     private static string GenerateQrPayload(EnergyReservation reservation)
     {
+        // Build a one-time QR payload for an approved reservation.
         var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .Replace('+', '-')
             .Replace('/', '_')

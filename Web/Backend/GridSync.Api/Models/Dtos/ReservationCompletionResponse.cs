@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: ReservationCompletionResponse.cs
+// Project: GridSync.Api
+// Description: Response after operator completes a reservation transfer.
+// -------------------------------------------------------------
+
 namespace GridSync.Api.Models.Dtos;
 
 public class ReservationCompletionResponse

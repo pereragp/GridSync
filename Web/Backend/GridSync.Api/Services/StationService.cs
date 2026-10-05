@@ -80,6 +80,7 @@ public class StationService
     // GET ALL stations
     public async Task<List<StationResponse>> GetAllAsync()
     {
+        // Return every solar station as a response DTO.
         var stations = await _db.SolarStations.Find(_ => true).ToListAsync();
         return stations.Select(ToResponse).ToList();
     }
@@ -88,6 +89,7 @@ public class StationService
     // GET BY ID — return one station or throw if not found
     public async Task<StationResponse> GetByIdAsync(string id)
     {
+        // Load one station by id.
         var station = await FindRequiredAsync(id);
         return ToResponse(station);
     }
@@ -139,6 +141,7 @@ public class StationService
     // UPDATE SCHEDULE — GridOperator updates schedule and battery slots only 
     public async Task<StationResponse> UpdateScheduleAsync(string id, UpdateStationScheduleRequest request)
     {
+        // Update open/close hours, working days, and slot count.
         var station = await FindRequiredAsync(id);
 
         // Validate time strings: parse "HH:mm" format
@@ -181,6 +184,7 @@ public class StationService
     /// <summary>Returns active stations within radiusKm of the given coordinates.</summary>
     public async Task<List<NearbyStationResponse>> GetNearbyAsync(double latitude, double longitude, double radiusKm)
     {
+        // Filter active stations within radius using Haversine distance.
         if (latitude < -90 || latitude > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
 
@@ -261,6 +265,7 @@ public class StationService
     /// <summary>Creates N battery documents for a newly created station.</summary>
     private async Task CreateBatteriesAsync(SolarStation station, string? createdByUserId)
     {
+        // Insert one booking slot document per physical battery.
         if (station.AvailableBatterySlots <= 0)
             return;
 
@@ -293,6 +298,7 @@ public class StationService
         double previousCapacityKwh,
         string? createdByUserId)
     {
+        // Add, remove, or resize batteries when station config changes.
         var batteries = await _db.EnergyBookingSlots
             .Find(b => b.StationId == station.Id)
             .SortBy(b => b.BatteryIndex)
@@ -398,6 +404,7 @@ public class StationService
     /// </summary>
     private async Task<string> GenerateUniqueStationCodeAsync()
     {
+        // Loop until a unique SGH- code is found.
         string code;
         do
         {
@@ -411,6 +418,7 @@ public class StationService
     /// <summary>Great-circle distance in km between two WGS84 points.</summary>
     private static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
     {
+        // Compute great-circle distance in kilometers.
         const double earthRadiusKm = 6371.0;
         var dLat = DegreesToRadians(lat2 - lat1);
         var dLon = DegreesToRadians(lon2 - lon1);
@@ -420,12 +428,14 @@ public class StationService
         return earthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
+    /// <summary>Convert degrees to radians.</summary>
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
 
     /// <summary>Total capacity = battery slots × kWh per battery.</summary>
     private static double ComputeTotalCapacityKwh(int availableBatterySlots, double batteryCapacityKwh) =>
         availableBatterySlots * batteryCapacityKwh;
 
+    /// <summary>Map station entity to API response DTO.</summary>
     private static StationResponse ToResponse(SolarStation s) => new()
     {
         Id = s.Id,
@@ -445,8 +455,10 @@ public class StationService
         UpdatedAt = s.UpdatedAt
     };
 
+    /// <summary>Map station entity plus distance for nearby search.</summary>
     private static NearbyStationResponse ToNearbyResponse(SolarStation s, double distanceKm)
     {
+        // Map station to nearby DTO with rounded distance.
         var baseResponse = ToResponse(s);
         return new NearbyStationResponse
         {

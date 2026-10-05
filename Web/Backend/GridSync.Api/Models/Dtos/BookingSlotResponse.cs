@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: BookingSlotResponse.cs
+// Project: GridSync.Api
+// Description: DTO returned for station battery slot details.
+// -------------------------------------------------------------
+
 namespace GridSync.Api.Models.Dtos;
 
 /// <summary>Battery slot returned to staff clients.</summary>

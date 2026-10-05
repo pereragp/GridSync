@@ -1,5 +1,6 @@
 // -------------------------------------------------------------
 // File: BookingSlotsController.cs
+// Project: GridSync.Api
 // Description: HTTP endpoints for physical battery slot management (UC07).
 // -------------------------------------------------------------
 
@@ -20,6 +21,7 @@ public class BookingSlotsController : ControllerBase
 
     public BookingSlotsController(BookingSlotService bookingSlotService)
     {
+        // Inject battery slot service.
         _bookingSlotService = bookingSlotService;
     }
 
@@ -27,6 +29,7 @@ public class BookingSlotsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? stationId, [FromQuery] string? status)
     {
+        // List batteries with optional filters.
         try
         {
             return Ok(await _bookingSlotService.GetAllAsync(stationId, status));
@@ -41,6 +44,7 @@ public class BookingSlotsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        // Return one battery by id.
         try
         {
             return Ok(await _bookingSlotService.GetByIdAsync(id));
@@ -55,6 +59,7 @@ public class BookingSlotsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateBookingSlotRequest request)
     {
+        // Update battery notes.
         try
         {
             return Ok(await _bookingSlotService.UpdateAsync(id, request));
@@ -74,6 +79,7 @@ public class BookingSlotsController : ControllerBase
     [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Close(string id)
     {
+        // Mark battery closed to new bookings.
         try
         {
             return Ok(await _bookingSlotService.CloseAsync(id));
@@ -93,6 +99,7 @@ public class BookingSlotsController : ControllerBase
     [Authorize(Roles = UserRoles.GridOperator)]
     public async Task<IActionResult> Reopen(string id)
     {
+        // Reopen a closed battery.
         try
         {
             return Ok(await _bookingSlotService.ReopenAsync(id));
@@ -111,6 +118,7 @@ public class BookingSlotsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
+        // Delete battery when service rules allow.
         try
         {
             await _bookingSlotService.DeleteAsync(id);

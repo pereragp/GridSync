@@ -1,5 +1,6 @@
 // -------------------------------------------------------------
 // File: BookingSlotService.cs
+// Project: GridSync.Api
 // Description: List, update notes, close, and delete station batteries.
 // -------------------------------------------------------------
 
@@ -17,12 +18,14 @@ public class BookingSlotService
 
     public BookingSlotService(MongoDbContext db)
     {
+        // Wire MongoDB context for battery slots.
         _db = db;
     }
 
     /// <summary>Lists batteries, optionally filtered by station and status.</summary>
     public async Task<List<BookingSlotResponse>> GetAllAsync(string? stationId, string? status)
     {
+        // List batteries with optional station and status filters.
         var filter = Builders<EnergyBookingSlot>.Filter.Empty;
 
         if (!string.IsNullOrWhiteSpace(stationId))
@@ -47,6 +50,7 @@ public class BookingSlotService
     /// <summary>Returns one battery by id.</summary>
     public async Task<BookingSlotResponse> GetByIdAsync(string id)
     {
+        // Load one battery and include station name.
         var slot = await FindRequiredAsync(id);
         var stationName = await ResolveStationNameAsync(slot.StationId);
         return ToResponse(slot, stationName);
@@ -55,6 +59,7 @@ public class BookingSlotService
     /// <summary>Updates battery notes only (capacity is owned by the station).</summary>
     public async Task<BookingSlotResponse> UpdateAsync(string id, UpdateBookingSlotRequest request)
     {
+        // Update notes on a non-closed battery.
         var slot = await FindRequiredAsync(id);
 
         if (slot.Status == SlotStatus.Closed)
@@ -70,6 +75,7 @@ public class BookingSlotService
     /// <summary>Marks a battery as Closed so it cannot be booked.</summary>
     public async Task<BookingSlotResponse> CloseAsync(string id)
     {
+        // Close battery when no reserves or active bookings remain.
         var slot = await FindRequiredAsync(id);
 
         if (slot.Status == SlotStatus.Closed)
@@ -94,6 +100,7 @@ public class BookingSlotService
     /// <summary>Reopens a closed battery for booking.</summary>
     public async Task<BookingSlotResponse> ReopenAsync(string id)
     {
+        // Reopen a closed battery on an active station.
         var slot = await FindRequiredAsync(id);
 
         if (slot.Status == SlotStatus.Available)
@@ -114,6 +121,7 @@ public class BookingSlotService
     /// <summary>Deletes a battery with no reservations or reserved energy.</summary>
     public async Task DeleteAsync(string id)
     {
+        // Remove battery when no linked active reservations.
         var slot = await FindRequiredAsync(id);
 
         if (slot.ReservedChargingKwh > 0 || slot.ReservedDropOffKwh > 0)
@@ -131,6 +139,7 @@ public class BookingSlotService
 
     private async Task<EnergyBookingSlot> FindRequiredAsync(string id)
     {
+        // Load battery by id or throw not found.
         if (!ObjectId.TryParse(id, out _))
             throw new KeyNotFoundException($"Battery '{id}' was not found.");
 
@@ -140,12 +149,14 @@ public class BookingSlotService
 
     private async Task<string> ResolveStationNameAsync(string stationId)
     {
+        // Look up station display name (empty if missing).
         var station = await _db.SolarStations.Find(s => s.Id == stationId).FirstOrDefaultAsync();
         return station?.Name ?? string.Empty;
     }
 
     private async Task<List<BookingSlotResponse>> MapWithStationNamesAsync(List<EnergyBookingSlot> slots)
     {
+        // Batch-resolve station names for slot DTOs.
         if (slots.Count == 0)
             return [];
 
@@ -160,6 +171,7 @@ public class BookingSlotService
             .ToList();
     }
 
+    /// <summary>Map battery entity to API response DTO.</summary>
     private static BookingSlotResponse ToResponse(EnergyBookingSlot slot, string stationName) => new()
     {
         Id = slot.Id,

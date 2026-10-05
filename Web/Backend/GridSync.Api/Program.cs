@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: Program.cs
+// Project: GridSync.Api
+// Description: ASP.NET Core entry point — DI, auth, Swagger, and middleware.
+// -------------------------------------------------------------
+
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using DotNetEnv;
