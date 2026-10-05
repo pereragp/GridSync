@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: EnergyReservation.cs
+// Project: GridSync.Api
+// Description: Mongo model for a Charging or DropOff energy reservation.
+// -------------------------------------------------------------
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 

@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: ReservationDashboardStatsResponse.cs
+// Project: GridSync.Api
+// Description: Operational reservation counts for grid operators.
+// -------------------------------------------------------------
+
 namespace GridSync.Api.Models.Dtos;
 
 public class ReservationDashboardStatsResponse

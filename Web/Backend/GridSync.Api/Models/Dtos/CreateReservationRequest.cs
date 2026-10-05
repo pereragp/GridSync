@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: CreateReservationRequest.cs
+// Project: GridSync.Api
+// Description: Request body to create a Charging or DropOff reservation.
+// -------------------------------------------------------------
+
 using System.ComponentModel.DataAnnotations;
 using GridSync.Api.Models;
 

@@ -31,6 +31,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+        // Exchange credentials for JWT.
         try
         {
             var result = await _authService.LoginAsync(request);
@@ -49,6 +50,7 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Logout()
     {
+        // Revoke current JWT server-side.
         try
         {
             await _authService.LogoutAsync(User);
@@ -67,6 +69,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
+        // Start password reset flow (email or dev token).
         var result = await _authService.ForgotPasswordAsync(request);
         return Ok(result);
     }
@@ -78,6 +81,7 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
+        // Set password from emailed reset token.
         try
         {
             await _authService.ResetPasswordAsync(request);
@@ -96,6 +100,7 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
+        // Change password for authenticated user.
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId))
         {

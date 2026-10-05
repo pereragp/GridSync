@@ -91,6 +91,7 @@ public class UserService
     /// </summary>
     public async Task<List<UserResponse>> GetAllAsync()
     {
+        // Return all users for administration.
         var users = await _db.Users.Find(_ => true).ToListAsync();
         return users.Select(ToResponse).ToList();
     }
@@ -100,6 +101,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> GetByIdAsync(string id)
     {
+        // Load one user by MongoDB id.
         var user = await FindRequiredAsync(id);
         return ToResponse(user);
     }
@@ -109,6 +111,7 @@ public class UserService
     /// </summary>
     public async Task<List<UserResponse>> GetPendingAsync()
     {
+        // List prosumers awaiting Backoffice approval.
         var users = await _db.Users
             .Find(u => u.Role == UserRoles.Prosumer && u.Status == UserStatus.Pending)
             .ToListAsync();
@@ -120,6 +123,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> ApprovePendingAsync(string id)
     {
+        // Activate a pending prosumer account.
         var user = await FindRequiredAsync(id);
 
         if (user.Role != UserRoles.Prosumer || user.Status != UserStatus.Pending)
@@ -138,6 +142,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> UpdateAsync(string id, UpdateUserRequest request)
     {
+        // Update profile fields on an existing user.
         var user = await FindRequiredAsync(id);
 
         user.FullName = request.FullName.Trim();
@@ -154,6 +159,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> RequestDeactivationAsync(string id)
     {
+        // Record prosumer deactivation request timestamp.
         var user = await FindRequiredAsync(id);
 
         if (user.Role != UserRoles.Prosumer)
@@ -177,6 +183,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> DeactivateAsync(string id)
     {
+        // Backoffice sets account status to deactivated.
         var user = await FindRequiredAsync(id);
 
         if (user.Status == UserStatus.Deactivated)
@@ -196,6 +203,7 @@ public class UserService
     /// </summary>
     public async Task<UserResponse> ReactivateAsync(string id, string backofficeUserId)
     {
+        // Restore deactivated account and record auditor id.
         var user = await FindRequiredAsync(id);
 
         if (user.Status != UserStatus.Deactivated)
@@ -218,6 +226,7 @@ public class UserService
     /// </summary>
     private async Task<User> FindRequiredAsync(string id)
     {
+        // Load user or throw when missing.
         var user = await _db.Users.Find(u => u.Id == id).FirstOrDefaultAsync();
         if (user is null)
         {
@@ -231,6 +240,7 @@ public class UserService
     /// </summary>
     private async Task EnsureEmailUniqueAsync(string email)
     {
+        // Reject duplicate normalized email addresses.
         var normalized = email.Trim().ToLowerInvariant();
         var exists = await _db.Users.Find(u => u.Email == normalized).AnyAsync();
         if (exists)
@@ -244,6 +254,7 @@ public class UserService
     /// </summary>
     private async Task EnsureNicUniqueAsync(string nic)
     {
+        // Reject duplicate prosumer NIC values.
         var exists = await _db.Users.Find(u => u.Nic == nic).AnyAsync();
         if (exists)
         {

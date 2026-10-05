@@ -178,6 +178,7 @@ public class AuthService
     /// </summary>
     public async Task ResetPasswordAsync(ResetPasswordRequest request)
     {
+        // Apply new password when reset token is valid.
         PasswordRules.EnsureValid(request.NewPassword);
 
         var email = request.Email.Trim().ToLowerInvariant();
@@ -204,6 +205,7 @@ public class AuthService
     /// </summary>
     public async Task ChangePasswordAsync(string userId, ChangePasswordRequest request)
     {
+        // Verify current password then store new hash.
         PasswordRules.EnsureValid(request.NewPassword);
 
         var user = await _db.Users.Find(u => u.Id == userId).FirstOrDefaultAsync()
@@ -224,6 +226,7 @@ public class AuthService
     /// </summary>
     public async Task<bool> IsTokenRevokedAsync(string jti)
     {
+        // True when logout recorded this JWT id.
         return await _db.RevokedTokens.Find(t => t.Jti == jti).AnyAsync();
     }
 
@@ -232,6 +235,7 @@ public class AuthService
     /// </summary>
     private string CreateJwtToken(User user, DateTime expiresAt)
     {
+        // Build signed JWT with role and profile claims.
         var jti = Guid.NewGuid().ToString("N");
 
         var claims = new List<Claim>

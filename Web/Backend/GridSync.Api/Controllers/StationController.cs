@@ -31,6 +31,7 @@ public class StationsController : ControllerBase
     [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Create([FromBody] CreateStationRequest request)
     {
+        // Create solar hub attributed to caller.
         var createdBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
         try{
@@ -46,6 +47,7 @@ public class StationsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        // List all stations.
         var stations = await _stationService.GetAllAsync();
         return Ok(stations);
     }
@@ -57,6 +59,7 @@ public class StationsController : ControllerBase
         [FromQuery] double lng,
         [FromQuery] double radiusKm = 10)
     {
+        // Active stations within radius of coordinates.
         try
         {
             return Ok(await _stationService.GetNearbyAsync(lat, lng, radiusKm));
@@ -71,6 +74,7 @@ public class StationsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        // Return one station by id.
         try
         {
             var station = await _stationService.GetByIdAsync(id);
@@ -87,6 +91,7 @@ public class StationsController : ControllerBase
     [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateStationRequest request)
     {
+        // Update station details and sync batteries.
         try
         {
             var station = await _stationService.UpdateAsync(id, request);
@@ -109,6 +114,7 @@ public class StationsController : ControllerBase
     [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> UpdateSchedule(string id, [FromBody] UpdateStationScheduleRequest request)
     {
+        // Backoffice updates schedule and slot count.
         try
         {
             var station = await _stationService.UpdateScheduleAsync(id, request);
@@ -129,6 +135,7 @@ public class StationsController : ControllerBase
     [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Deactivate(string id)
     {
+        // Deactivate when no blocking reservations exist.
         try
         {
             var station = await _stationService.DeactivateAsync(id);
@@ -149,6 +156,7 @@ public class StationsController : ControllerBase
     [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Reactivate(string id)
     {
+        // Restore inactive station to active.
         try
         {
             var station = await _stationService.ReactivateAsync(id);

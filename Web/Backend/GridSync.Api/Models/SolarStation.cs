@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: SolarStation.cs
+// Project: GridSync.Api
+// Description: Mongo model for a solar microgrid station (hub).
+// -------------------------------------------------------------
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 

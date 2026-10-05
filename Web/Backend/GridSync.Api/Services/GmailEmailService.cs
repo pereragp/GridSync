@@ -24,6 +24,7 @@ public class GmailEmailService : IEmailService
         _logger = logger;
     }
 
+    /// <summary>True when Gmail SMTP settings are complete.</summary>
     public bool IsConfigured =>
         _settings.Enabled
         && !string.IsNullOrWhiteSpace(_settings.FromEmail)
@@ -34,6 +35,7 @@ public class GmailEmailService : IEmailService
     /// </summary>
     public async Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
     {
+        // Send HTML message via Gmail SMTP.
         if (!IsConfigured)
         {
             throw new InvalidOperationException("Gmail email is not configured. Set EmailSettings in .env.");

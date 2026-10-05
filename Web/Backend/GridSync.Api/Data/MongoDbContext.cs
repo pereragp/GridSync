@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: MongoDbContext.cs
+// Project: GridSync.Api
+// Description: MongoDB database and collection accessors.
+// -------------------------------------------------------------
+
 using GridSync.Api.Models;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
@@ -8,8 +14,10 @@ public class MongoDbContext
 {
     private readonly IMongoDatabase _database;
 
+    /// <summary>Connect using configured connection string and database name.</summary>
     public MongoDbContext(IOptions<MongoDbSettings> settings)
     {
+        // Open MongoDB client and bind database.
         var client = new MongoClient(settings.Value.ConnectionString);
         _database = client.GetDatabase(settings.Value.DatabaseName);
     }
@@ -31,6 +39,7 @@ public class MongoDbContext
     public IMongoCollection<RevokedToken> RevokedTokens =>
         _database.GetCollection<RevokedToken>("RevokedTokens");
 
+    /// <summary>Generic accessor for an arbitrary collection name.</summary>
     public IMongoCollection<T> GetCollection<T>(string name) =>
         _database.GetCollection<T>(name);
 }

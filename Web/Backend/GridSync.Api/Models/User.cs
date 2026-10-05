@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: User.cs
+// Project: GridSync.Api
+// Description: Mongo model for staff and prosumer user accounts.
+// -------------------------------------------------------------
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 

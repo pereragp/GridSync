@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: UpdateReservationRequest.cs
+// Project: GridSync.Api
+// Description: Request body for prosumer to update a pending reservation.
+// -------------------------------------------------------------
+
 using System.ComponentModel.DataAnnotations;
 using GridSync.Api.Models;
 
