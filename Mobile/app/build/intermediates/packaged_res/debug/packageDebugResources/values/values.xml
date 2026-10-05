@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="grid_500">#FF1F9A57</color>
+    <color name="grid_700">#FF12663A</color>
+    <color name="grid_900">#FF0C3D25</color>
+    <color name="white">#FFFFFFFF</color>
+    <string name="app_name">GridSync Mobile</string>
+    <style name="Theme.GridSyncMobile" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/grid_900</item>
+    </style>
+</resources>
