@@ -186,19 +186,6 @@ Full request/response shapes are documented in Swagger while the API is running.
 
 ---
 
-## Individual contributions
-
-| Member | IT number | Main areas |
-|--------|-----------|------------|
-| _Name_ | _ITxxxxxxxx_ | _e.g. API / Stations / Auth_ |
-| _Name_ | _ITxxxxxxxx_ | _e.g. Web UI / Reservations_ |
-| _Name_ | _ITxxxxxxxx_ | _e.g. Mobile / QR / Maps_ |
-| _Name_ | _ITxxxxxxxx_ | _e.g. Booking slots / Report_ |
-
-_(Fill in before submission.)_
-
----
-
 ## Assignment notes
 
 - Clients must not hold core business logic; enforce rules in the API.
