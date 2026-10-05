@@ -69,3 +69,7 @@ export function completeReservation(id) {
 export function getReservationDashboardStats() {
   return apiRequest('/api/reservations/dashboard-stats');
 }
+
+export function getProsumerDashboardStats() {
+  return apiRequest('/api/reservations/prosumer-dashboard');
+}

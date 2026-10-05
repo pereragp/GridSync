@@ -26,10 +26,10 @@ public class StationService
     // CREATE new solar hub
     public async Task<StationResponse> CreateAsync(CreateStationRequest request, string createdByUserId)
     {
-        // Validate that capacity values are positive numbers
-        if (request.CapacityKw <= 0 || request.CapacityKwh <= 0)
-            throw new InvalidOperationException("Capacity values must be greater than zero.");
-        
+        // Validate that per-battery capacity is positive and slots are non-negative
+        if (request.BatteryCapacityKwh <= 0)
+            throw new InvalidOperationException("Battery capacity (kWh) must be greater than zero.");
+
         if (request.Latitude < -90 || request.Latitude > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
 
@@ -48,14 +48,13 @@ public class StationService
             StationCode = stationCode,
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
-            Address = request.Address?.Trim(),
             Location = new GeoLocation {
                 Type = "Point",
                 Coordinates = new[] { request.Longitude, request.Latitude }
             },
-            CapacityKw = request.CapacityKw,
-            CapacityKwh = request.CapacityKwh,
+            BatteryCapacityKwh = request.BatteryCapacityKwh,
             AvailableBatterySlots = request.AvailableBatterySlots,
+            TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, request.BatteryCapacityKwh),
             Schedule = new StationSchedule{
                 // Use provided values or fall back to sensible defaults
                 OpenTime = request.OpenTime ?? "08:00",
@@ -71,7 +70,9 @@ public class StationService
         // Save to MongoDB
         await _db.SolarStations.InsertOneAsync(station);
 
-        // Map to response DTO and return
+        // One EnergyBookingSlot document per physical battery
+        await CreateBatteriesAsync(station, createdByUserId);
+
         return ToResponse(station);
     }
 
@@ -79,6 +80,7 @@ public class StationService
     // GET ALL stations
     public async Task<List<StationResponse>> GetAllAsync()
     {
+        // Return every solar station as a response DTO.
         var stations = await _db.SolarStations.Find(_ => true).ToListAsync();
         return stations.Select(ToResponse).ToList();
     }
@@ -87,6 +89,7 @@ public class StationService
     // GET BY ID — return one station or throw if not found
     public async Task<StationResponse> GetByIdAsync(string id)
     {
+        // Load one station by id.
         var station = await FindRequiredAsync(id);
         return ToResponse(station);
     }
@@ -99,8 +102,8 @@ public class StationService
         var station = await FindRequiredAsync(id);
 
         // Validations
-        if (request.CapacityKw <= 0 || request.CapacityKwh <= 0)
-            throw new InvalidOperationException("Capacity values must be greater than zero.");
+        if (request.BatteryCapacityKwh <= 0)
+            throw new InvalidOperationException("Battery capacity (kWh) must be greater than zero.");
 
         if (request.Latitude < -90 || request.Latitude > 90)
             throw new InvalidOperationException("Latitude must be between -90 and 90.");
@@ -111,22 +114,25 @@ public class StationService
         if (request.AvailableBatterySlots < 0)
             throw new InvalidOperationException("Battery slots cannot be negative.");
 
+        var previousBatteryCount = station.AvailableBatterySlots;
+        var previousCapacity = station.BatteryCapacityKwh;
+
         // Apply changes to the loaded station
         station.Name = request.Name.Trim();
         station.Description = request.Description?.Trim();
-        station.Address = request.Address?.Trim();
         station.Location = new GeoLocation
         {
             Type = "Point",
             Coordinates = new[] { request.Longitude, request.Latitude }
         };
-        station.CapacityKw = request.CapacityKw;
-        station.CapacityKwh = request.CapacityKwh;
+        station.BatteryCapacityKwh = request.BatteryCapacityKwh;
         station.AvailableBatterySlots = request.AvailableBatterySlots;
+        station.TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, request.BatteryCapacityKwh);
         station.UpdatedAt = DateTime.UtcNow;
 
-        // ReplaceOneAsync replaces the whole document in MongoDB
         await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        await SyncBatteriesAsync(station, previousBatteryCount, previousCapacity, station.CreatedBy);
 
         return ToResponse(station);
     }
@@ -135,6 +141,7 @@ public class StationService
     // UPDATE SCHEDULE — GridOperator updates schedule and battery slots only 
     public async Task<StationResponse> UpdateScheduleAsync(string id, UpdateStationScheduleRequest request)
     {
+        // Update open/close hours, working days, and slot count.
         var station = await FindRequiredAsync(id);
 
         // Validate time strings: parse "HH:mm" format
@@ -157,15 +164,52 @@ public class StationService
         if (request.AvailableBatterySlots < 0)
             throw new InvalidOperationException("Battery slots cannot be negative.");
 
-        // Apply only schedule-related changes
+        var previousBatteryCount = station.AvailableBatterySlots;
+
+        // Apply only schedule-related changes; recalculate total when slots change
         station.Schedule.OpenTime = request.OpenTime;
         station.Schedule.CloseTime = request.CloseTime;
         station.Schedule.WorkingDays = request.WorkingDays;
         station.AvailableBatterySlots = request.AvailableBatterySlots;
+        station.TotalCapacityKwh = ComputeTotalCapacityKwh(request.AvailableBatterySlots, station.BatteryCapacityKwh);
         station.UpdatedAt = DateTime.UtcNow;
         
         await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        await SyncBatteriesAsync(station, previousBatteryCount, station.BatteryCapacityKwh, station.CreatedBy);
+
         return ToResponse(station);
+    }
+
+    /// <summary>Returns active stations within radiusKm of the given coordinates.</summary>
+    public async Task<List<NearbyStationResponse>> GetNearbyAsync(double latitude, double longitude, double radiusKm)
+    {
+        // Filter active stations within radius using Haversine distance.
+        if (latitude < -90 || latitude > 90)
+            throw new InvalidOperationException("Latitude must be between -90 and 90.");
+
+        if (longitude < -180 || longitude > 180)
+            throw new InvalidOperationException("Longitude must be between -180 and 180.");
+
+        if (radiusKm <= 0 || radiusKm > 500)
+            throw new InvalidOperationException("RadiusKm must be between 0 and 500.");
+
+        var stations = await _db.SolarStations
+            .Find(s => s.Status == StationStatus.Active)
+            .ToListAsync();
+
+        return stations
+            .Select(s =>
+            {
+                var lat = s.Location.Coordinates[1];
+                var lng = s.Location.Coordinates[0];
+                var distance = HaversineKm(latitude, longitude, lat, lng);
+                var response = ToNearbyResponse(s, distance);
+                return response;
+            })
+            .Where(s => s.DistanceKm <= radiusKm)
+            .OrderBy(s => s.DistanceKm)
+            .ToList();
     }
 
     //------------------------------------------
@@ -195,9 +239,151 @@ public class StationService
         return ToResponse(station);
     }
 
+    //------------------------------------------
+    // REACTIVATE an inactive node
+    public async Task<StationResponse> ReactivateAsync(string id)
+    {
+        var station = await FindRequiredAsync(id);
+
+        if (station.Status == StationStatus.Active)
+            throw new InvalidOperationException("Station is already active.");
+
+        if (station.Status != StationStatus.Inactive)
+            throw new InvalidOperationException("Only inactive stations can be reactivated.");
+
+        station.Status = StationStatus.Active;
+        station.UpdatedAt = DateTime.UtcNow;
+        await _db.SolarStations.ReplaceOneAsync(s => s.Id == station.Id, station);
+
+        return ToResponse(station);
+    }
+
     //---------------
     // Helpers
     //---------------
+
+    /// <summary>Creates N battery documents for a newly created station.</summary>
+    private async Task CreateBatteriesAsync(SolarStation station, string? createdByUserId)
+    {
+        // Insert one booking slot document per physical battery.
+        if (station.AvailableBatterySlots <= 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var batteries = Enumerable.Range(1, station.AvailableBatterySlots)
+            .Select(index => new EnergyBookingSlot
+            {
+                StationId = station.Id,
+                BatteryIndex = index,
+                CapacityKwh = station.BatteryCapacityKwh,
+                ActualEnergyKwh = 0,
+                ReservedChargingKwh = 0,
+                ReservedDropOffKwh = 0,
+                Status = SlotStatus.Available,
+                CreatedBy = createdByUserId,
+                CreatedAt = now,
+                UpdatedAt = now
+            })
+            .ToList();
+
+        await _db.EnergyBookingSlots.InsertManyAsync(batteries);
+    }
+
+    /// <summary>
+    /// Syncs battery documents when station battery count or capacity changes.
+    /// </summary>
+    private async Task SyncBatteriesAsync(
+        SolarStation station,
+        int _previousBatteryCount,
+        double previousCapacityKwh,
+        string? createdByUserId)
+    {
+        // Add, remove, or resize batteries when station config changes.
+        var batteries = await _db.EnergyBookingSlots
+            .Find(b => b.StationId == station.Id)
+            .SortBy(b => b.BatteryIndex)
+            .ToListAsync();
+
+        var newCount = station.AvailableBatterySlots;
+        var currentCount = batteries.Count;
+
+        if (newCount > currentCount)
+        {
+            var startIndex = currentCount == 0
+                ? 1
+                : batteries.Max(b => b.BatteryIndex) + 1;
+            var toAdd = newCount - currentCount;
+            var now = DateTime.UtcNow;
+            var extras = Enumerable.Range(0, toAdd)
+                .Select(offset => new EnergyBookingSlot
+                {
+                    StationId = station.Id,
+                    BatteryIndex = startIndex + offset,
+                    CapacityKwh = station.BatteryCapacityKwh,
+                    ActualEnergyKwh = 0,
+                    ReservedChargingKwh = 0,
+                    ReservedDropOffKwh = 0,
+                    Status = SlotStatus.Available,
+                    CreatedBy = createdByUserId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                })
+                .ToList();
+            await _db.EnergyBookingSlots.InsertManyAsync(extras);
+            batteries.AddRange(extras);
+        }
+        else if (newCount < currentCount)
+        {
+            var removeCount = currentCount - newCount;
+            var candidates = batteries
+                .OrderByDescending(b => b.BatteryIndex)
+                .Take(removeCount)
+                .ToList();
+
+            foreach (var battery in candidates)
+            {
+                if (battery.ReservedChargingKwh > 0 || battery.ReservedDropOffKwh > 0)
+                    throw new InvalidOperationException(
+                        $"Cannot reduce battery count: battery {battery.BatteryIndex} still has reserved energy.");
+
+                var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
+                var active = await _db.EnergyReservations.CountDocumentsAsync(
+                    r => r.SlotId == battery.Id && activeStatuses.Contains(r.Status));
+
+                if (active > 0)
+                    throw new InvalidOperationException(
+                        $"Cannot reduce battery count: battery {battery.BatteryIndex} has active reservations.");
+            }
+
+            var ids = candidates.Select(b => b.Id).ToList();
+            await _db.EnergyBookingSlots.DeleteManyAsync(b => ids.Contains(b.Id));
+            batteries = batteries.Where(b => !ids.Contains(b.Id)).ToList();
+        }
+
+        if (Math.Abs(station.BatteryCapacityKwh - previousCapacityKwh) > 0.0001)
+        {
+            var activeStatuses = new[] { ReservationStatus.Pending, ReservationStatus.Approved };
+            foreach (var battery in batteries)
+            {
+                var active = await _db.EnergyReservations.CountDocumentsAsync(
+                    r => r.SlotId == battery.Id && activeStatuses.Contains(r.Status));
+
+                if (active > 0)
+                    throw new InvalidOperationException(
+                        "Cannot change battery capacity while batteries have active reservations.");
+
+                if (battery.ActualEnergyKwh > station.BatteryCapacityKwh)
+                    throw new InvalidOperationException(
+                        $"Cannot set capacity below actual energy on battery {battery.BatteryIndex}.");
+            }
+
+            await _db.EnergyBookingSlots.UpdateManyAsync(
+                b => b.StationId == station.Id,
+                Builders<EnergyBookingSlot>.Update
+                    .Set(b => b.CapacityKwh, station.BatteryCapacityKwh)
+                    .Set(b => b.UpdatedAt, DateTime.UtcNow));
+        }
+    }
 
     /// <summary>
     /// Loads a station from the database or throws if it doesn't exist.
@@ -218,6 +404,7 @@ public class StationService
     /// </summary>
     private async Task<string> GenerateUniqueStationCodeAsync()
     {
+        // Loop until a unique SGH- code is found.
         string code;
         do
         {
@@ -228,28 +415,70 @@ public class StationService
         return code;
     }
 
-    /// <summary>
-    /// Maps a SolarStation database entity to a StationResponse DTO.
-    /// </summary>
+    /// <summary>Great-circle distance in km between two WGS84 points.</summary>
+    private static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
+    {
+        // Compute great-circle distance in kilometers.
+        const double earthRadiusKm = 6371.0;
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(DegreesToRadians(lat1)) * Math.Cos(DegreesToRadians(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return earthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    /// <summary>Convert degrees to radians.</summary>
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
+
+    /// <summary>Total capacity = battery slots × kWh per battery.</summary>
+    private static double ComputeTotalCapacityKwh(int availableBatterySlots, double batteryCapacityKwh) =>
+        availableBatterySlots * batteryCapacityKwh;
+
+    /// <summary>Map station entity to API response DTO.</summary>
     private static StationResponse ToResponse(SolarStation s) => new()
     {
         Id = s.Id,
         StationCode = s.StationCode,
         Name = s.Name,
         Description = s.Description,
-        Address = s.Address,
         // GeoJSON: index 0 = longitude, index 1 = latitude
         Longitude = s.Location.Coordinates[0],
         Latitude = s.Location.Coordinates[1],
-        CapacityKw = s.CapacityKw,
-        CapacityKwh = s.CapacityKwh,
+        BatteryCapacityKwh = s.BatteryCapacityKwh,
         AvailableBatterySlots = s.AvailableBatterySlots,
+        TotalCapacityKwh = ComputeTotalCapacityKwh(s.AvailableBatterySlots, s.BatteryCapacityKwh),
         Schedule = s.Schedule,
         Status = s.Status,
         CreatedBy = s.CreatedBy,
         CreatedAt = s.CreatedAt,
         UpdatedAt = s.UpdatedAt
     };
+
+    /// <summary>Map station entity plus distance for nearby search.</summary>
+    private static NearbyStationResponse ToNearbyResponse(SolarStation s, double distanceKm)
+    {
+        // Map station to nearby DTO with rounded distance.
+        var baseResponse = ToResponse(s);
+        return new NearbyStationResponse
+        {
+            Id = baseResponse.Id,
+            StationCode = baseResponse.StationCode,
+            Name = baseResponse.Name,
+            Description = baseResponse.Description,
+            Longitude = baseResponse.Longitude,
+            Latitude = baseResponse.Latitude,
+            BatteryCapacityKwh = baseResponse.BatteryCapacityKwh,
+            AvailableBatterySlots = baseResponse.AvailableBatterySlots,
+            TotalCapacityKwh = baseResponse.TotalCapacityKwh,
+            Schedule = baseResponse.Schedule,
+            Status = baseResponse.Status,
+            CreatedBy = baseResponse.CreatedBy,
+            CreatedAt = baseResponse.CreatedAt,
+            UpdatedAt = baseResponse.UpdatedAt,
+            DistanceKm = Math.Round(distanceKm, 2)
+        };
+    }
 
 }
 

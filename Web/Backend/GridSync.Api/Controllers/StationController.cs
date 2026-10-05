@@ -26,13 +26,12 @@ public class StationsController : ControllerBase
         _stationService = stationService;
     }
 
-    /// <summary>
-    /// POST /api/stations — Backoffice creates a new solar hub
-    /// </summary>
+    /// <summary>POST /api/stations/create — Backoffice or GridOperator creates a solar hub.</summary>
     [HttpPost("create")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Create([FromBody] CreateStationRequest request)
     {
+        // Create solar hub attributed to caller.
         var createdBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
         try{
@@ -44,22 +43,38 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// GET /api/stations 
-    /// </summary>
+    /// <summary>GET /api/stations</summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        // List all stations.
         var stations = await _stationService.GetAllAsync();
         return Ok(stations);
     }
 
-    /// <summary>
-    /// GET /api/stations/{id} — fetch a single station by id
-    /// </summary>
+    /// <summary>GET /api/stations/nearby?lat=&amp;lng=&amp;radiusKm=10</summary>
+    [HttpGet("nearby")]
+    public async Task<IActionResult> GetNearby(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] double radiusKm = 10)
+    {
+        // Active stations within radius of coordinates.
+        try
+        {
+            return Ok(await _stationService.GetNearbyAsync(lat, lng, radiusKm));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>GET /api/stations/{id}</summary>
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
+        // Return one station by id.
         try
         {
             var station = await _stationService.GetByIdAsync(id);
@@ -71,13 +86,12 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// PUT /api/stations/{id} — Backoffice does a full update of station details.
-    /// </summary>
+    /// <summary>PUT /api/stations/{id} — Backoffice or GridOperator updates station details.</summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateStationRequest request)
     {
+        // Update station details and sync batteries.
         try
         {
             var station = await _stationService.UpdateAsync(id, request);
@@ -94,12 +108,13 @@ public class StationsController : ControllerBase
     }
 
     /// <summary>
-    /// PATCH /api/stations/{id}/schedule — Backoffice or GridOperator updates schedule + slots.
+    /// PATCH /api/stations/{id}/schedule — Backoffice updates schedule + slots.
     /// </summary>
     [HttpPatch("{id}/schedule")]
-    [Authorize(Roles = $"{UserRoles.Backoffice},{UserRoles.GridOperator}")]
+    [Authorize(Roles = UserRoles.Backoffice)]
     public async Task<IActionResult> UpdateSchedule(string id, [FromBody] UpdateStationScheduleRequest request)
     {
+        // Backoffice updates schedule and slot count.
         try
         {
             var station = await _stationService.UpdateScheduleAsync(id, request);
@@ -115,13 +130,12 @@ public class StationsController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// POST /api/stations/{id}/deactivate — Backoffice deactivates a node.
-    /// </summary>
+    /// <summary>POST /api/stations/{id}/deactivate — blocked if active reservations exist.</summary>
     [HttpPost("{id}/deactivate")]
-    [Authorize(Roles = UserRoles.Backoffice)]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
     public async Task<IActionResult> Deactivate(string id)
     {
+        // Deactivate when no blocking reservations exist.
         try
         {
             var station = await _stationService.DeactivateAsync(id);
@@ -134,6 +148,27 @@ public class StationsController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return Conflict(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>POST /api/stations/{id}/reactivate — restores an inactive node to Active.</summary>
+    [HttpPost("{id}/reactivate")]
+    [Authorize(Roles = UserRoles.Backoffice + "," + UserRoles.GridOperator)]
+    public async Task<IActionResult> Reactivate(string id)
+    {
+        // Restore inactive station to active.
+        try
+        {
+            var station = await _stationService.ReactivateAsync(id);
+            return Ok(station);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
     }
 }

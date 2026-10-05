@@ -15,6 +15,7 @@ public static class PasswordRules
     /// </summary>
     public static void EnsureValid(string password)
     {
+        // Enforce minimum length, letter, and digit rules.
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
         {
             throw new InvalidOperationException("Password must be at least 8 characters long.");

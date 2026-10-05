@@ -65,8 +65,8 @@ export default function Login() {
               Power trading, synchronized for a cleaner grid.
             </h1>
             <p className="mt-5 max-w-lg text-base leading-relaxed text-grid-100/85 sm:text-lg">
-              Sign in to manage microgrid nodes, energy slots, and prosumer
-              reservations from one secure console.
+              Staff console for Backoffice and Grid Operators. Prosumers manage
+              bookings in the GridSync mobile app.
             </p>
           </section>
 
@@ -149,10 +149,7 @@ export default function Login() {
               </form>
 
               <p className="mt-6 border-t border-slate-200 pt-4 text-center text-sm text-slate-600">
-                Prosumer test account?{" "}
-                <Link to="/register" className="font-medium text-grid-700 hover:underline">
-                  Register here
-                </Link>
+                Prosumer? Use the GridSync mobile app to register and sign in.
               </p>
             </div>
           </section>

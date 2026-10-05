@@ -1,3 +1,9 @@
+// -------------------------------------------------------------
+// File: ReservationQrVerificationResponse.cs
+// Project: GridSync.Api
+// Description: Response after verifying a reservation QR payload.
+// -------------------------------------------------------------
+
 namespace GridSync.Api.Models.Dtos;
 
 public class ReservationQrVerificationResponse

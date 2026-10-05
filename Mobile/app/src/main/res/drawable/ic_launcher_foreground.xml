@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fallback adaptive foreground when density-specific PNGs are unavailable. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/gridsync_logo2"
+    android:inset="14%" />

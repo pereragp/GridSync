@@ -1,8 +1,19 @@
+// -------------------------------------------------------------
+// File: EnergyBookingSlot.cs
+// Project: GridSync.Api
+// Description: Mongo model for one physical battery at a solar station.
+// -------------------------------------------------------------
+
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
 namespace GridSync.Api.Models;
 
+/// <summary>
+/// One physical battery at a solar station.
+/// Old time-window fields are ignored so legacy Mongo documents still load.
+/// </summary>
+[BsonIgnoreExtraElements]
 public class EnergyBookingSlot
 {
     [BsonId]
@@ -13,22 +24,27 @@ public class EnergyBookingSlot
     [BsonRepresentation(BsonType.ObjectId)]
     public string StationId { get; set; } = string.Empty;
 
-    [BsonElement("slotStart")]
-    public DateTime SlotStart { get; set; }
+    /// <summary>1-based battery number within the station.</summary>
+    [BsonElement("batteryIndex")]
+    public int BatteryIndex { get; set; }
 
-    [BsonElement("slotEnd")]
-    public DateTime SlotEnd { get; set; }
+    /// <summary>Max energy this battery can hold (kWh).</summary>
+    [BsonElement("capacityKwh")]
+    public double CapacityKwh { get; set; }
 
-    [BsonElement("energyKwh")]
-    public double EnergyKwh { get; set; }
+    /// <summary>Energy physically stored after completed transfers (kWh).</summary>
+    [BsonElement("actualEnergyKwh")]
+    public double ActualEnergyKwh { get; set; }
 
-    [BsonElement("maxReservations")]
-    public int MaxReservations { get; set; } = 1;
+    /// <summary>kWh soft-locked by Pending/Approved Charging reservations (free space to deposit).</summary>
+    [BsonElement("reservedChargingKwh")]
+    public double ReservedChargingKwh { get; set; }
 
-    [BsonElement("reservedCount")]
-    public int ReservedCount { get; set; }
+    /// <summary>kWh soft-locked by Pending/Approved DropOff reservations (stored energy).</summary>
+    [BsonElement("reservedDropOffKwh")]
+    public double ReservedDropOffKwh { get; set; }
 
-    /// <summary>Available | FullyBooked | Closed</summary>
+    /// <summary>Available | Closed</summary>
     [BsonElement("status")]
     public string Status { get; set; } = SlotStatus.Available;
 
@@ -51,6 +67,5 @@ public class EnergyBookingSlot
 public static class SlotStatus
 {
     public const string Available = "Available";
-    public const string FullyBooked = "FullyBooked";
     public const string Closed = "Closed";
 }
