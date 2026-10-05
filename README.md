@@ -168,32 +168,6 @@ Full request/response shapes are documented in Swagger while the API is running.
 
 ---
 
-## Documentation
-
-| Document | Path |
-|----------|------|
-| Requirement specification | [`docs/Requirement_Specification.html`](docs/Requirement_Specification.html) |
-| Use case diagram | [`docs/usecase-gridsync.html`](docs/usecase-gridsync.html) |
-| DFD | [`docs/dfd-gridsync.html`](docs/dfd-gridsync.html) |
-
----
-
-## Demo video
-
-> Assignment requirement: a video of **no more than 5 minutes** explaining how the application works.
-
-**Video link:** _[Add YouTube or OneDrive link here]_
-
----
-
-## Assignment notes
-
-- Clients must not hold core business logic; enforce rules in the API.
-- Deploy the Web API on **IIS** for the final demo as required by the module brief.
-- Do not commit `.env` files or secrets (already covered by `.gitignore`).
-
----
-
 ## License
 
 Academic coursework project for SLIIT SE4040 — not licensed for production redistribution.
